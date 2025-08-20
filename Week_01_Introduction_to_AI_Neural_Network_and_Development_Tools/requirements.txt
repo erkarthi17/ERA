@@ -1,0 +1,19 @@
+# Web framework
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# HTTP requests
+requests==2.32.3
+
+# Environment management
+python-dotenv==1.0.1
+
+# HTML parsing
+beautifulsoup4==4.12.3
+
+# Transformers for summarization
+transformers==4.44.2
+torch==2.4.0
+
+# Optional: accelerate CPU/GPU inference
+accelerate==0.33.0
