@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "http://127.0.0.1:8000";
+  // const API_BASE = "http://127.0.0.1:8000"; This is required for internal testing
+  const API_BASE = "http://13.62.19.107:8000"; // This is the IP provided by the AWS Server based on the instance created (Ubuntu)
 
   const $ = (id) => document.getElementById(id);
   const btn = $("analyzeBtn");
