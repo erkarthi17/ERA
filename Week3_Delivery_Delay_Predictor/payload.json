@@ -1,0 +1,9 @@
+{
+  "distance_km": 5,
+  "traffic_level": "Low",
+  "weather": "Snow",
+  "vehicle_type": "Bike",
+  "time_of_day": "Night",
+  "origin": "Castle Donington",
+  "destination": "London"
+}
