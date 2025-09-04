@@ -11,6 +11,7 @@ This project implements a machine learning-powered API to predict potential deli
 
 ## Project Structure
 
+
 ├── .env # Environment variables (e.g., GEMINI_API_KEY) - IGNORED BY GIT
 ├── .gitignore # Specifies files/folders to ignore in Git
 ├── app.py # FastAPI application main entry point
