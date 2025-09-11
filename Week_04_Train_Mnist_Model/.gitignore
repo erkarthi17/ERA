@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Virtual environment
+.env/
+.venv/
+env/
+venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Data folder (MNIST downloads here)
+data/
+
+# Logs
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
