@@ -100,3 +100,8 @@ FC Layer – Classifies into 10 digit classes (0–9).
    Final Accuracy (5 epochs): >98% 🎯
 
 Training & evaluation curves are saved in results/training_curves.png.
+
+Results obtained during testing as shown below.,
+
+<img width="716" height="578" alt="image" src="https://github.com/user-attachments/assets/03235fad-1dba-442f-af8f-49c3fc1dfa4c" />
+
