@@ -46,7 +46,35 @@ class Net(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)  # raw logits
         return x
+    
+# --------------------------------------------
+# A smaller model with fewer parameters
+# --------------------------------------------
+class TinyNet(nn.Module):
+    def __init__(self):
+        super(TinyNet, self).__init__()
+        self.conv1 = nn.Conv2d(1, 20, 3, padding=1)     # 200 params
+        self.bn1 = nn.BatchNorm2d(20)                   # 40
 
+        self.conv2 = nn.Conv2d(20, 28, 3, padding=1)    # 5,048 params
+        self.bn2 = nn.BatchNorm2d(28)                   # 56
+
+        self.conv3 = nn.Conv2d(28, 64, 3, padding=1)    # 16,192 params
+        self.bn3 = nn.BatchNorm2d(64)                   # 128
+
+        self.pool = nn.MaxPool2d(2, 2)
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(64, 10)                     # 650
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.gap(x)
+        x = x.view(x.size(0), -1)
+        return self.fc(x)
+# Total params: ~22,514
+    
 # ----------------------------
 # Training & Testing
 # ----------------------------
@@ -127,7 +155,8 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
     # Model, optimizer, scheduler
-    model = Net().to(device)
+    # model = Net().to(device)
+    model = TinyNet().to(device)  # Use TinyNet instead of Net for fewer parameters
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
     criterion = nn.CrossEntropyLoss()
