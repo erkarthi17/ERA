@@ -30,7 +30,7 @@ pip install -r requirements.txt
 
 3. Usage
 
-python main.py --epochs 10 --batch-size 256 --lr 0.0005
+python main.py --epochs 5 --batch-size 256 --lr 0.001
 
 Available Options
 
