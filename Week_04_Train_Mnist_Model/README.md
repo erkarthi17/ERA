@@ -1,73 +1,102 @@
-# 🧠 MNIST Digit Classifier (PyTorch)
+# 🖤 MNIST Classification with PyTorch
 
-This project trains a **Convolutional Neural Network (CNN)** on the MNIST handwritten digits dataset using **PyTorch**.  
-It achieves **~98.5% accuracy on the test set in the very first epoch** 🚀.
+This project trains a **Convolutional Neural Network (CNN)** on the classic [MNIST handwritten digits dataset](http://yann.lecun.com/exdb/mnist/).  
+It includes two architectures:  
+
+- **`Net`** – A deep CNN ( > 1M parameters )  
+- **`TinyNet`** – A lightweight CNN with **22,514 trainable parameters**  
+  - Specially designed to stay **under 25k parameters** while still reaching **>95% accuracy in the first epoch** 🚀
 
 ---
 
 ## 📂 Project Structure
-mnist_project/
-│── data/ # MNIST dataset (auto-downloaded, ignored in git)
-│── results/ # Plots & model summary saved here
-│── main.py # Training & testing pipeline
-│── requirements.txt # Dependencies
-│── README.md # Project documentation
-│── .gitignore # Git ignore rules
 
+├── main.py # Training script
+├── requirements.txt # Dependencies
+├── README.md # Project documentation
+├── results/ # Saved plots & model summaries
+│ ├── training_curves.png
+│ └── model_summary.txt
+└── data/ # MNIST dataset (auto-downloaded)
 
----
+## ⚡ Installation
 
-## ⚙️ Installation
+```bash
+# Clone this repo
+git clone [https://github.com/your-username/mnist-pytorch.git](https://github.com/erkarthi17/ERA.git)
+cd mnist-pytorch
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/mnist_project.git
-   cd mnist_project
+# Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate   # Linux/Mac
+venv\Scripts\activate      # Windows 
 
-2. Install dependencies:
-
+# Install dependencies
 pip install -r requirements.txt
+```
 
-3. Usage
+## ▶️ Usage
 
-python main.py --epochs 5 --batch-size 256 --lr 0.001
+Train with default settings:
+----------------------------
+   
+   python main.py
 
-Available Options
+Train with custom arguments:
+----------------------------
 
---epochs : number of training epochs (default = 20)
+   python main.py --epochs 5 --batch-size 256 --lr 0.01
 
---batch-size : batch size for training (default = 512)
+Available arguments:
+--------------------
 
---lr : learning rate (default = 0.001)
+--batch-size : Batch size (default = 512)
 
---step-size : StepLR scheduler step size (default = 15)
+--epochs : Number of training epochs (default = 20)
 
---gamma : StepLR gamma decay (default = 0.1)
+--lr : Learning rate (default = 0.001)
 
---no-cuda : force CPU mode
+--step-size : Scheduler step size (default = 15)
 
-4. Results
+--gamma : Scheduler decay factor (default = 0.1)
 
-Test Accuracy: ~98.5% on Epoch 1
+--no-cuda : Force CPU training even if GPU is available
 
-Accuracy and loss plots are saved in: results/training_curves.png
+## 🏗️ TinyNet Architecture (<25k params)
 
-Model summary is saved in: results/model_summary.txt
+The TinyNet architecture was carefully designed to balance efficiency and accuracy:
 
-5. .Net Class architecture as follows.,
+| Layer               | Output Shape      | Params |
+| ------------------- | ----------------- | ------ |
+| Conv2d (1→20) + BN  | 20 × 28 × 28      | 240    |
+| MaxPool2d           | 20 × 14 × 14      | 0      |
+| Conv2d (20→28) + BN | 28 × 14 × 14      | 5,104  |
+| MaxPool2d           | 28 × 7 × 7        | 0      |
+| Conv2d (28→64) + BN | 64 × 7 × 7        | 16,320 |
+| AdaptiveAvgPool2d   | 64 × 1 × 1        | 0      |
+| Fully Connected     | 10                | 650    |
 
-Input: 1x28x28
+| **Total Params**    | **22,514** ✅ <25k 
 
-Conv1: 1 → 32, kernel=3 → 26x26x32
+## 🔎 How it works
 
-Conv2: 32 → 64, kernel=3 → 24x24x64 → MaxPool(2x2) → 12x12x64
+Conv1 + BN + Pooling – Extracts low-level features (edges, strokes).
 
-Conv3: 64 → 128, kernel=3 → 10x10x128
+Conv2 + BN + Pooling – Captures mid-level patterns (digit parts).
 
-Conv4: 128 → 256, kernel=3 → 8x8x256 → MaxPool(2x2) → 4x4x256
+Conv3 + BN – Learns high-level digit representations.
 
-Flatten: 4096
+Global Average Pooling (GAP) – Reduces feature maps to a compact vector.
 
-FC1: 4096 → 50
+FC Layer – Classifies into 10 digit classes (0–9).
 
-FC2: 50 → 10 (class logits)
+📊 Results
+-----------
+
+   python main.py --epochs 5 --batch-size 256 --lr 0.01
+
+   Test Accuracy after 1st epoch: ~95–96% ✅
+
+   Final Accuracy (5 epochs): >98% 🎯
+
+Training & evaluation curves are saved in results/training_curves.png.
