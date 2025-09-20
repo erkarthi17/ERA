@@ -10,62 +10,124 @@ from torchsummary import summary  # pip install torchsummary
 
 
 # Define the CNN architecture
+# class Net(nn.Module):
+#     def __init__(self):
+#         super(Net, self).__init__()
+
+#         # Input Block - 1x28x28 (RF: 1)
+#         self.convblock1 = nn.Sequential(
+#             nn.Conv2d(1, 8, 3, padding=1, bias=False),  # 8x28x28 | RF: 3
+#             nn.BatchNorm2d(8),
+#             nn.ReLU()
+#         )
+
+#         # Block 2
+#         self.convblock2 = nn.Sequential(
+#             nn.Conv2d(8, 16, 3, padding=1, bias=False),  # 16x28x28 | RF: 5
+#             nn.BatchNorm2d(16),
+#             nn.ReLU()
+#         )
+#         self.pool1 = nn.MaxPool2d(2, 2)  # 16x14x14 | RF: 6
+
+#         # Block 3
+#         self.convblock3 = nn.Sequential(
+#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 10
+#             nn.BatchNorm2d(16),
+#             nn.ReLU()
+#         )
+
+#         # Block 4
+#         self.convblock4 = nn.Sequential(
+#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 14
+#             nn.BatchNorm2d(16),
+#             nn.ReLU()
+#         )
+#         self.pool2 = nn.MaxPool2d(2, 2)  # 16x7x7 | RF: 16
+
+#         # Block 5 + Dropout
+#         self.convblock5 = nn.Sequential(
+#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x7x7 | RF: 24
+#             nn.BatchNorm2d(16),
+#             nn.ReLU(),
+#             nn.Dropout(0.1)  # Regularization
+#         )
+
+#         # Output Block
+#         self.convblock6 = nn.Conv2d(16, 10, 1, bias=False)  # 10x7x7 | RF: 24
+#         self.gap = nn.AdaptiveAvgPool2d(1)  # 10x1x1
+
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-
-        # Input Block - 1x28x28 (RF: 1)
+        # Input Block
         self.convblock1 = nn.Sequential(
-            nn.Conv2d(1, 8, 3, padding=1, bias=False),  # 8x28x28 | RF: 3
-            nn.BatchNorm2d(8),
-            nn.ReLU()
-        )
-
-        # Block 2
-        self.convblock2 = nn.Sequential(
-            nn.Conv2d(8, 16, 3, padding=1, bias=False),  # 16x28x28 | RF: 5
-            nn.BatchNorm2d(16),
-            nn.ReLU()
-        )
-        self.pool1 = nn.MaxPool2d(2, 2)  # 16x14x14 | RF: 6
-
-        # Block 3
-        self.convblock3 = nn.Sequential(
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 10
-            nn.BatchNorm2d(16),
-            nn.ReLU()
-        )
-
-        # Block 4
-        self.convblock4 = nn.Sequential(
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 14
-            nn.BatchNorm2d(16),
-            nn.ReLU()
-        )
-        self.pool2 = nn.MaxPool2d(2, 2)  # 16x7x7 | RF: 16
-
-        # Block 5 + Dropout
-        self.convblock5 = nn.Sequential(
-            nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x7x7 | RF: 24
-            nn.BatchNorm2d(16),
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=(3, 3), padding=0, bias=False),
             nn.ReLU(),
-            nn.Dropout(0.1)  # Regularization
-        )
+            nn.BatchNorm2d(16),
+            nn.Dropout(0.1)
+        ) # output_size = 26
 
-        # Output Block
-        self.convblock6 = nn.Conv2d(16, 10, 1, bias=False)  # 10x7x7 | RF: 24
-        self.gap = nn.AdaptiveAvgPool2d(1)  # 10x1x1
+        # CONVOLUTION BLOCK 1
+        self.convblock2 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=(3, 3), padding=0, bias=False),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+            nn.Dropout(0.1)
+        ) # output_size = 24
+
+        # TRANSITION BLOCK 1
+        self.convblock3 = nn.Sequential(
+            nn.Conv2d(in_channels=32, out_channels=10, kernel_size=(1, 1), padding=0, bias=False),
+        ) # output_size = 24
+        self.pool1 = nn.MaxPool2d(2, 2) # output_size = 12
+
+        # CONVOLUTION BLOCK 2
+        self.convblock4 = nn.Sequential(
+            nn.Conv2d(in_channels=10, out_channels=16, kernel_size=(3, 3), padding=0, bias=False),
+            nn.ReLU(),            
+            nn.BatchNorm2d(16),
+            nn.Dropout(0.1)
+        ) # output_size = 10
+        self.convblock5 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=(3, 3), padding=0, bias=False),
+            nn.ReLU(),            
+            nn.BatchNorm2d(16),
+            nn.Dropout(0.1)
+        ) # output_size = 8
+        self.convblock6 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=(3, 3), padding=0, bias=False),
+            nn.ReLU(),            
+            nn.BatchNorm2d(16),
+            nn.Dropout(0.1)
+        ) # output_size = 6
+        self.convblock7 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=16, kernel_size=(3, 3), padding=1, bias=False),
+            nn.ReLU(),            
+            nn.BatchNorm2d(16),
+            nn.Dropout(0.1)
+        ) # output_size = 6
+        
+        # OUTPUT BLOCK
+        self.gap = nn.Sequential(
+            nn.AvgPool2d(kernel_size=6)
+        ) # output_size = 1
+
+        self.convblock8 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=10, kernel_size=(1, 1), padding=0, bias=False)
+        )
 
     def forward(self, x):
         x = self.convblock1(x)
         x = self.convblock2(x)
-        x = self.pool1(x)
         x = self.convblock3(x)
+        x = self.pool1(x)
         x = self.convblock4(x)
-        x = self.pool2(x)
         x = self.convblock5(x)
         x = self.convblock6(x)
-        x = self.gap(x)
+        x = self.convblock7(x)
+        x = self.gap(x)        
+        x = self.convblock8(x)
+
         x = x.view(-1, 10)
         return F.log_softmax(x, dim=-1)
 
@@ -98,7 +160,7 @@ test_transforms = transforms.Compose([
 full_train = datasets.MNIST('../data', train=True, download=True, transform=train_transforms)
 train_set, val_set = torch.utils.data.random_split(full_train, [50000, 10000], generator=torch.Generator().manual_seed(42))
 
-kwargs = {'num_workers': 2, 'pin_memory': True} if use_cuda else {}
+kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {} # Increased num_workers
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, **kwargs)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, shuffle=False, **kwargs)
 
@@ -107,6 +169,8 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=batch_size, shuffle
 def train(model, device, loader, optimizer, scheduler, epoch):
     model.train()
     pbar = tqdm(loader)
+    correct = 0 # Initialize correct predictions for training
+    processed = 0 # Initialize total processed samples for training
     for batch_idx, (data, target) in enumerate(pbar):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -115,7 +179,14 @@ def train(model, device, loader, optimizer, scheduler, epoch):
         loss.backward()
         optimizer.step()
         scheduler.step()
-        pbar.set_description(f'Epoch {epoch} Loss={loss.item():.4f}')
+
+        # Calculate training accuracy
+        pred = output.argmax(dim=1, keepdim=True)
+        correct += pred.eq(target.view_as(pred)).sum().item()
+        processed += len(data)
+
+        # Update progress bar description with loss and training accuracy
+        pbar.set_description(f'Epoch {epoch} Loss={loss.item():.4f} Accuracy={100.*correct/processed:.2f}%')
 
 
 # Validation
