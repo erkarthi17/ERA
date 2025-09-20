@@ -1,20 +1,20 @@
-MNIST CNN Model for 99.4%+ Accuracy
+**MNIST CNN Model for 99.4%+ Accuracy**
 
 This project implements a Convolutional Neural Network (CNN) for the MNIST handwritten digit classification dataset using PyTorch. The goal is to achieve a validation/test accuracy of at least 99.4% while adhering to specific architectural and training constraints.
 
-Assignment Requirements Met:
+**Assignment Requirements Met:**
 
 99.4% validation/test accuracy (50/10k split): The model achieves 99.39% validation/test accuracy on the MNIST dataset, using a 50,000/10,000 train/validation split.
 
-Less than 20k Parameters: The total number of parameters is 13,808, verified with torchsummary.
+**Less than 20k Parameters:** The total number of parameters is 13,808, verified with torchsummary.
 
-Less than 20 Epochs: The model is trained for 19 epochs.
+**Less than 20 Epochs:** The model is trained for 19 epochs.
 
-Use of Batch Normalization (BN): nn.BatchNorm2d layers are used in all convolutional blocks.
+**Use of Batch Normalization (BN):** nn.BatchNorm2d layers are used in all convolutional blocks.
 
-Use of Dropout: nn.Dropout(0.1) is applied in multiple convolutional blocks for regularization.
+**Use of Dropout:** nn.Dropout(0.1) is applied in multiple convolutional blocks for regularization.
 
-Use of Global Average Pooling (GAP): nn.AvgPool2d(kernel_size=6) is used before the final classifier, replacing fully connected layers.
+**Use of Global Average Pooling (GAP):** nn.AvgPool2d(kernel_size=6) is used before the final classifier, replacing fully connected layers.
 
 Model Architecture and Details
 
@@ -147,15 +147,15 @@ Estimated Total Size (MB): 1.12
 
 Total Parameters: 13,808 (<20k) ✅
 
-Use of Batch Normalization
+**Use of Batch Normalization**
 
 Yes, nn.BatchNorm2d layers are included after every convolutional block.
 
-Use of Dropout
+**Use of Dropout**
 
 Yes, nn.Dropout(0.1) is applied throughout the network for regularization.
 
-Use of GAP
+**Use of GAP**
 
 Yes, nn.AvgPool2d(kernel_size=6) is used before the final 1×1 convolution classifier.
 
