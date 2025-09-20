@@ -10,52 +10,6 @@ from torchsummary import summary  # pip install torchsummary
 
 
 # Define the CNN architecture
-# class Net(nn.Module):
-#     def __init__(self):
-#         super(Net, self).__init__()
-
-#         # Input Block - 1x28x28 (RF: 1)
-#         self.convblock1 = nn.Sequential(
-#             nn.Conv2d(1, 8, 3, padding=1, bias=False),  # 8x28x28 | RF: 3
-#             nn.BatchNorm2d(8),
-#             nn.ReLU()
-#         )
-
-#         # Block 2
-#         self.convblock2 = nn.Sequential(
-#             nn.Conv2d(8, 16, 3, padding=1, bias=False),  # 16x28x28 | RF: 5
-#             nn.BatchNorm2d(16),
-#             nn.ReLU()
-#         )
-#         self.pool1 = nn.MaxPool2d(2, 2)  # 16x14x14 | RF: 6
-
-#         # Block 3
-#         self.convblock3 = nn.Sequential(
-#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 10
-#             nn.BatchNorm2d(16),
-#             nn.ReLU()
-#         )
-
-#         # Block 4
-#         self.convblock4 = nn.Sequential(
-#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x14x14 | RF: 14
-#             nn.BatchNorm2d(16),
-#             nn.ReLU()
-#         )
-#         self.pool2 = nn.MaxPool2d(2, 2)  # 16x7x7 | RF: 16
-
-#         # Block 5 + Dropout
-#         self.convblock5 = nn.Sequential(
-#             nn.Conv2d(16, 16, 3, padding=1, bias=False),  # 16x7x7 | RF: 24
-#             nn.BatchNorm2d(16),
-#             nn.ReLU(),
-#             nn.Dropout(0.1)  # Regularization
-#         )
-
-#         # Output Block
-#         self.convblock6 = nn.Conv2d(16, 10, 1, bias=False)  # 10x7x7 | RF: 24
-#         self.gap = nn.AdaptiveAvgPool2d(1)  # 10x1x1
-
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
