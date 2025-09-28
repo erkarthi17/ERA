@@ -40,6 +40,7 @@ Epochs to Converge     	 15                       	 15                          
 Optimizer              	 SGD + Momentum           	 Adam + Weight Decay           	 Adam + Weight Decay
 Scheduler              	 None                     	 OneCycleLR                    	 OneCycleLR (fast converge)
 Augmentation           	 None                     	 None                          	 ColorJitter, Rotation
+
 <img width="862" height="241" alt="image" src="https://github.com/user-attachments/assets/7836c3f2-6af8-4dfe-b03f-5cf03608d251" />
 
 
@@ -245,4 +246,5 @@ Test set: Average loss: 0.0519, Accuracy: 9839/10000 (98.39%)
 
 StepLR active. Current LR: 0.000937
 
-image.png
+<img width="2038" height="1102" alt="image" src="https://github.com/user-attachments/assets/54e2f203-f962-4de1-b201-93616208cce6" />
+
