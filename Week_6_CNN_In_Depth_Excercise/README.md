@@ -94,6 +94,7 @@ PS C:\Users\erkar\OneDrive\Desktop\KK_Data\Git_Local\ERA\Week_6_CNN_In_Depth_Exc
 Device: cpu
 
 Model Summary for Model_3:
+
 ----------------------------------------------------------------
         Layer (type)               Output Shape         Param #
 ================================================================
@@ -139,6 +140,7 @@ Forward/backward pass size (MB): 0.57
 Params size (MB): 0.01
 Estimated Total Size (MB): 0.58
 ----------------------------------------------------------------
+
 Optimizer: Adam (
 Parameter Group 0
     amsgrad: False
