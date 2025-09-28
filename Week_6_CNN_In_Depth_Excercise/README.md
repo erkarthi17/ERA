@@ -30,17 +30,16 @@ The `train.py` script is the single entry point for training. Choose the model b
 
 Model Comparison
 -------------------------------------------------
-Feature / Metric       | Model_1.py               | Model_2.py                    | Model_3.py (Target)
--------------------------------------------------------------------------------------------------------------
-Purpose                | Baseline skeleton, minimal | Improved with BN + Dropout + GAP | Ultra-compact, optimized RF
-Params                 | 3.6K                     | 5.7K                          | 3.9K (<5K)
-Receptive Field        | 10x10                    | 14x14                         | 24x24
-Best Training Acc.     | ~97.5%                   | ~98.2%                        | 98.4%
-Best Test Acc.         | ~98.0%                   | ~98.5%                        | 98.7% (>99% goal)
-Epochs to Converge     | 15                       | 15                            | 12–15
-Optimizer              | SGD + Momentum           | Adam + Weight Decay           | Adam + Weight Decay
-Scheduler              | None                     | OneCycleLR                    | OneCycleLR (fast converge)
-Augmentation           | None                     | None                          | ColorJitter, Rotation
+Feature / Metric       	 Model_1.py               	 Model_2.py                    	 Model_3.py (Target)
+Purpose                	 Baseline skeleton, minimal 	 Improved with BN + Dropout + GAP 	 Ultra-compact, optimized RF
+Params                 	 3.6K                     	 5.7K                          	 3.9K (<5K)
+Receptive Field        	 10x10                    	 14x14                         	 24x24
+Best Training Acc.     	 ~97.5%                   	 ~98.2%                        	98.40%
+Best Test Acc.         	 ~98.0%                   	 ~98.5%                        	 98.7% (>99% goal)
+Epochs to Converge     	 15                       	 15                            	 12–15
+Optimizer              	 SGD + Momentum           	 Adam + Weight Decay           	 Adam + Weight Decay
+Scheduler              	 None                     	 OneCycleLR                    	 OneCycleLR (fast converge)
+Augmentation           	 None                     	 None                          	 ColorJitter, Rotation
 
 
 Model Details
