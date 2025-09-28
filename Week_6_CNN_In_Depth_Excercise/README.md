@@ -40,6 +40,7 @@ Epochs to Converge     	 15                       	 15                          
 Optimizer              	 SGD + Momentum           	 Adam + Weight Decay           	 Adam + Weight Decay
 Scheduler              	 None                     	 OneCycleLR                    	 OneCycleLR (fast converge)
 Augmentation           	 None                     	 None                          	 ColorJitter, Rotation
+<img width="862" height="241" alt="image" src="https://github.com/user-attachments/assets/7836c3f2-6af8-4dfe-b03f-5cf03608d251" />
 
 
 Model Details
