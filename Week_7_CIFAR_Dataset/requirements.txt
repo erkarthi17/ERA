@@ -1,0 +1,7 @@
+torch
+torchvision
+matplotlib
+tqdm
+torchsummary
+albumentations
+numpy<2

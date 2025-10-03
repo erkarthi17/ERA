@@ -1,0 +1,24 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Dataset files downloaded by torchvision
+data/
+
+# Plotting outputs
+*.png
+
+# PyTorch model checkpoints/weights (if you save any)
+*.pth
+*.pt
+
+# IDE-specific files (e.g., Cursor, VS Code)
+.vscode/
+.cursor/
+
+# Operating System files
+.DS_Store
+Thumbs.db
