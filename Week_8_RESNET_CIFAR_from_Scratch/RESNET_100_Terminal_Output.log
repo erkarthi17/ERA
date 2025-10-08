@@ -1,0 +1,273 @@
+PS C:\Users\erkar\OneDrive\Desktop\KK_Data\Git_Local\ERA> cd .\Week_8_RESNET_CIFAR_From_Scratch\
+PS C:\Users\erkar\OneDrive\Desktop\KK_Data\Git_Local\ERA\Week_8_RESNET_CIFAR_From_Scratch> ls
+
+
+    Directory: C:\Users\erkar\OneDrive\Desktop\KK_Data\Git_Local\ERA\Week_8_RESNET_CIFAR_From_Scratch
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+dar--l        04/10/2025     13:22                checkpoints
+dar--l        04/10/2025     13:18                data
+dar--l        04/10/2025     13:04                huggingface_app
+dar--l        04/10/2025     23:32                __pycache__
+-a---l        04/10/2025     23:31            333 config.py
+-a---l        04/10/2025     22:43           6591 logs.md
+-a---l        04/10/2025     23:31           5742 model.py
+-a---l        04/10/2025     13:02              0 README.md
+-a---l        04/10/2025     13:04             51 requirements.txt
+-a---l        06/10/2025     06:49           5010 train.py
+-a---l        04/10/2025     13:09            699 utils.py
+
+
+PS C:\Users\erkar\OneDrive\Desktop\KK_Data\Git_Local\ERA\Week_8_RESNET_CIFAR_From_Scratch> python train.py 1
+🚀 Training on device: cpu
+📊 Configuration: {'batch_size': 128, 'epochs': 100, 'lr': 0.1, 'momentum': 0.9, 'weight_decay': 0.0005, 'log_file': 'logs.md', 'checkpoint_path': 'checkpoints/best_model.pth'}
+============================================================
+📥 Loading CIFAR-100 dataset...
+Files already downloaded and verified
+Files already downloaded and verified
+📈 Dataset loaded: 50000 training samples, 10000 validation samples
+
+🆕 Epoch   1/100 | Train:   7.71% (4.0407) | Val:  11.25% | Time: 634.5s | ETA: 1046.9m | LR: 0.099975
+     ✅ New best model saved! Val Acc: 11.25%
+
+🆕 Epoch   2/100 | Train:  16.35% (3.4838) | Val:  19.85% | Time: 716.5s | ETA: 1103.3m | LR: 0.099901
+     ✅ New best model saved! Val Acc: 19.85%
+
+🆕 Epoch   3/100 | Train:  23.80% (3.0518) | Val:  28.82% | Time: 730.5s | ETA: 1121.7m | LR: 0.099778
+     ✅ New best model saved! Val Acc: 28.82%
+
+🆕 Epoch   4/100 | Train:  31.49% (2.6382) | Val:  34.91% | Time: 739.0s | ETA: 1128.2m | LR: 0.099606
+     ✅ New best model saved! Val Acc: 34.91%
+
+🆕 Epoch   5/100 | Train:  38.47% (2.3005) | Val:  40.36% | Time: 733.4s | ETA: 1125.4m | LR: 0.099384
+     ✅ New best model saved! Val Acc: 40.36%
+
+🆕 Epoch   6/100 | Train:  43.27% (2.0834) | Val:  42.49% | Time: 663.7s | ETA: 1101.3m | LR: 0.099114
+     ✅ New best model saved! Val Acc: 42.49%
+
+🆕 Epoch   7/100 | Train:  47.38% (1.9161) | Val:  46.71% | Time: 577.8s | ETA: 1061.9m | LR: 0.098796
+     ✅ New best model saved! Val Acc: 46.71%
+
+📊 Epoch   8/100 | Train:  49.74% (1.8244) | Val:  46.07% | Time: 560.3s | ETA: 1026.5m | LR: 0.098429
+
+🆕 Epoch   9/100 | Train:  51.68% (1.7404) | Val:  48.04% | Time: 583.7s | ETA: 1000.9m | LR: 0.098015
+     ✅ New best model saved! Val Acc: 48.04%
+
+📊 Epoch  10/100 | Train:  52.90% (1.6891) | Val:  44.05% | Time: 543.9s | ETA: 972.5m | LR: 0.097553
+
+🆕 Epoch  11/100 | Train:  54.33% (1.6414) | Val:  48.37% | Time: 538.3s | ETA: 946.9m | LR: 0.097044
+     ✅ New best model saved! Val Acc: 48.37%
+
+📊 Epoch  12/100 | Train:  55.53% (1.5927) | Val:  47.56% | Time: 541.4s | ETA: 924.4m | LR: 0.096489
+
+🆕 Epoch  13/100 | Train:  56.21% (1.5572) | Val:  49.27% | Time: 611.9s | ETA: 911.9m | LR: 0.095888
+     ✅ New best model saved! Val Acc: 49.27%
+
+📊 Epoch  14/100 | Train:  57.11% (1.5197) | Val:  49.26% | Time: 692.2s | ETA: 907.9m | LR: 0.095241
+
+📊 Epoch  15/100 | Train:  58.07% (1.4925) | Val:  49.21% | Time: 689.1s | ETA: 902.6m | LR: 0.094550
+
+🆕 Epoch  16/100 | Train:  58.29% (1.4685) | Val:  53.35% | Time: 690.3s | ETA: 896.6m | LR: 0.093815
+     ✅ New best model saved! Val Acc: 53.35%
+
+📊 Epoch  17/100 | Train:  58.92% (1.4426) | Val:  51.25% | Time: 690.2s | ETA: 890.0m | LR: 0.093037
+
+📊 Epoch  18/100 | Train:  60.02% (1.4092) | Val:  48.56% | Time: 693.3s | ETA: 883.1m | LR: 0.092216
+
+📊 Epoch  19/100 | Train:  60.55% (1.3953) | Val:  52.87% | Time: 689.3s | ETA: 875.4m | LR: 0.091354
+
+📊 Epoch  20/100 | Train:  60.21% (1.3897) | Val:  52.05% | Time: 689.2s | ETA: 867.3m | LR: 0.090451
+
+📊 Epoch  21/100 | Train:  61.12% (1.3686) | Val:  43.09% | Time: 690.8s | ETA: 859.0m | LR: 0.089508
+
+📊 Epoch  22/100 | Train:  61.76% (1.3406) | Val:  50.60% | Time: 688.0s | ETA: 850.2m | LR: 0.088526
+
+🆕 Epoch  23/100 | Train:  62.03% (1.3339) | Val:  53.93% | Time: 687.6s | ETA: 841.2m | LR: 0.087506
+     ✅ New best model saved! Val Acc: 53.93%
+
+📊 Epoch  24/100 | Train:  60.99% (1.3758) | Val:  45.15% | Time: 690.2s | ETA: 832.1m | LR: 0.086448
+
+🆕 Epoch  25/100 | Train:  62.57% (1.3079) | Val:  56.98% | Time: 683.9s | ETA: 822.5m | LR: 0.085355
+     ✅ New best model saved! Val Acc: 56.98%
+
+📊 Epoch  26/100 | Train:  62.97% (1.2879) | Val:  55.79% | Time: 690.1s | ETA: 813.0m | LR: 0.084227
+
+📊 Epoch  27/100 | Train:  62.92% (1.2958) | Val:  50.01% | Time: 686.7s | ETA: 803.3m | LR: 0.083066
+
+🆕 Epoch  28/100 | Train:  64.10% (1.2564) | Val:  57.81% | Time: 687.9s | ETA: 793.5m | LR: 0.081871
+     ✅ New best model saved! Val Acc: 57.81%
+
+📊 Epoch  29/100 | Train:  64.08% (1.2569) | Val:  56.17% | Time: 689.4s | ETA: 783.6m | LR: 0.080645
+
+📊 Epoch  30/100 | Train:  64.34% (1.2443) | Val:  53.59% | Time: 635.2s | ETA: 771.5m | LR: 0.079389
+
+📊 Epoch  31/100 | Train:  64.32% (1.2311) | Val:  57.65% | Time: 536.5s | ETA: 755.9m | LR: 0.078104
+
+📊 Epoch  32/100 | Train:  64.92% (1.2182) | Val:  55.03% | Time: 608.3s | ETA: 743.2m | LR: 0.076791
+
+📊 Epoch  33/100 | Train:  64.06% (1.2460) | Val:  53.98% | Time: 683.2s | ETA: 733.2m | LR: 0.075452
+
+📊 Epoch  34/100 | Train:  65.72% (1.1938) | Val:  52.49% | Time: 581.2s | ETA: 719.8m | LR: 0.074088
+
+📊 Epoch  35/100 | Train:  66.22% (1.1746) | Val:  57.46% | Time: 570.8s | ETA: 706.3m | LR: 0.072700
+
+📊 Epoch  36/100 | Train:  66.57% (1.1607) | Val:  56.89% | Time: 558.5s | ETA: 692.7m | LR: 0.071289
+
+📊 Epoch  37/100 | Train:  66.51% (1.1619) | Val:  53.81% | Time: 675.9s | ETA: 682.6m | LR: 0.069857
+
+📊 Epoch  38/100 | Train:  67.04% (1.1371) | Val:  55.53% | Time: 538.6s | ETA: 668.7m | LR: 0.068406
+
+📊 Epoch  39/100 | Train:  66.33% (1.1766) | Val:  52.68% | Time: 537.7s | ETA: 655.1m | LR: 0.066937
+
+📊 Epoch  40/100 | Train:  67.92% (1.0976) | Val:  54.73% | Time: 537.0s | ETA: 641.7m | LR: 0.065451
+
+🆕 Epoch  41/100 | Train:  68.52% (1.0874) | Val:  60.28% | Time: 537.2s | ETA: 628.5m | LR: 0.063950
+     ✅ New best model saved! Val Acc: 60.28%
+
+📊 Epoch  42/100 | Train:  68.89% (1.0644) | Val:  57.92% | Time: 539.0s | ETA: 615.5m | LR: 0.062434
+
+📊 Epoch  43/100 | Train:  69.13% (1.0573) | Val:  57.86% | Time: 536.2s | ETA: 602.7m | LR: 0.060907
+
+📊 Epoch  44/100 | Train:  69.63% (1.0421) | Val:  56.76% | Time: 536.6s | ETA: 590.0m | LR: 0.059369
+
+📊 Epoch  45/100 | Train:  70.30% (1.0120) | Val:  58.46% | Time: 537.7s | ETA: 577.6m | LR: 0.057822
+
+📊 Epoch  46/100 | Train:  70.83% (0.9976) | Val:  58.23% | Time: 536.0s | ETA: 565.2m | LR: 0.056267
+
+📊 Epoch  47/100 | Train:  71.35% (0.9807) | Val:  58.12% | Time: 536.2s | ETA: 553.0m | LR: 0.054705
+
+📊 Epoch  48/100 | Train:  71.68% (0.9625) | Val:  58.22% | Time: 536.6s | ETA: 541.0m | LR: 0.053140
+
+🆕 Epoch  49/100 | Train:  72.25% (0.9480) | Val:  60.55% | Time: 536.3s | ETA: 529.1m | LR: 0.051571
+     ✅ New best model saved! Val Acc: 60.55%
+
+📊 Epoch  50/100 | Train:  72.65% (0.9264) | Val:  58.65% | Time: 538.4s | ETA: 517.3m | LR: 0.050000
+
+📊 Epoch  51/100 | Train:  72.58% (0.9250) | Val:  57.73% | Time: 539.6s | ETA: 505.6m | LR: 0.048429
+
+📊 Epoch  52/100 | Train:  73.50% (0.9014) | Val:  60.24% | Time: 663.5s | ETA: 496.0m | LR: 0.046860
+
+📊 Epoch  53/100 | Train:  74.01% (0.8724) | Val:  60.22% | Time: 677.0s | ETA: 486.5m | LR: 0.045295
+
+📊 Epoch  54/100 | Train:  74.55% (0.8620) | Val:  59.53% | Time: 535.6s | ETA: 474.9m | LR: 0.043733
+
+🆕 Epoch  55/100 | Train:  74.93% (0.8400) | Val:  61.66% | Time: 535.6s | ETA: 463.5m | LR: 0.042178
+     ✅ New best model saved! Val Acc: 61.66%
+
+🆕 Epoch  56/100 | Train:  75.87% (0.8121) | Val:  61.74% | Time: 538.7s | ETA: 452.1m | LR: 0.040631
+     ✅ New best model saved! Val Acc: 61.74%
+
+📊 Epoch  57/100 | Train:  75.63% (0.8184) | Val:  60.81% | Time: 539.2s | ETA: 440.9m | LR: 0.039093
+
+📊 Epoch  58/100 | Train:  76.60% (0.7820) | Val:  61.12% | Time: 537.2s | ETA: 429.7m | LR: 0.037566
+
+🆕 Epoch  59/100 | Train:  75.03% (0.8374) | Val:  63.82% | Time: 535.8s | ETA: 418.6m | LR: 0.036050
+     ✅ New best model saved! Val Acc: 63.82%
+
+📊 Epoch  60/100 | Train:  77.96% (0.7304) | Val:  63.69% | Time: 540.5s | ETA: 407.6m | LR: 0.034549
+
+📊 Epoch  61/100 | Train:  78.90% (0.6996) | Val:  60.49% | Time: 537.1s | ETA: 396.6m | LR: 0.033063
+
+📊 Epoch  62/100 | Train:  79.65% (0.6717) | Val:  62.22% | Time: 536.5s | ETA: 385.7m | LR: 0.031594
+
+🆕 Epoch  63/100 | Train:  80.18% (0.6529) | Val:  64.99% | Time: 536.7s | ETA: 374.8m | LR: 0.030143
+     ✅ New best model saved! Val Acc: 64.99%
+
+📊 Epoch  64/100 | Train:  80.97% (0.6252) | Val:  63.65% | Time: 540.6s | ETA: 364.0m | LR: 0.028711
+
+🆕 Epoch  65/100 | Train:  82.02% (0.5923) | Val:  65.29% | Time: 535.8s | ETA: 353.3m | LR: 0.027300
+     ✅ New best model saved! Val Acc: 65.29%
+
+📊 Epoch  66/100 | Train:  82.33% (0.5752) | Val:  64.53% | Time: 538.7s | ETA: 342.6m | LR: 0.025912
+
+📊 Epoch  67/100 | Train:  83.08% (0.5479) | Val:  60.16% | Time: 536.1s | ETA: 332.0m | LR: 0.024548
+
+🆕 Epoch  68/100 | Train:  84.13% (0.5123) | Val:  67.83% | Time: 535.6s | ETA: 321.4m | LR: 0.023209
+     ✅ New best model saved! Val Acc: 67.83%
+
+📊 Epoch  69/100 | Train:  84.62% (0.4991) | Val:  59.17% | Time: 538.5s | ETA: 310.9m | LR: 0.021896
+
+📊 Epoch  70/100 | Train:  85.29% (0.4731) | Val:  65.44% | Time: 535.4s | ETA: 300.4m | LR: 0.020611
+
+🆕 Epoch  71/100 | Train:  85.63% (0.4599) | Val:  68.68% | Time: 538.3s | ETA: 289.9m | LR: 0.019355
+     ✅ New best model saved! Val Acc: 68.68%
+
+📊 Epoch  72/100 | Train:  87.27% (0.4076) | Val:  67.67% | Time: 538.4s | ETA: 279.5m | LR: 0.018129
+
+📊 Epoch  73/100 | Train:  88.25% (0.3752) | Val:  68.17% | Time: 538.1s | ETA: 269.2m | LR: 0.016934
+
+🆕 Epoch  74/100 | Train:  89.10% (0.3519) | Val:  68.71% | Time: 535.5s | ETA: 258.8m | LR: 0.015773
+     ✅ New best model saved! Val Acc: 68.71%
+
+🆕 Epoch  75/100 | Train:  89.87% (0.3273) | Val:  69.08% | Time: 538.5s | ETA: 248.6m | LR: 0.014645
+     ✅ New best model saved! Val Acc: 69.08%
+
+📊 Epoch  76/100 | Train:  90.61% (0.3021) | Val:  67.90% | Time: 538.7s | ETA: 238.3m | LR: 0.013552
+
+🆕 Epoch  77/100 | Train:  91.57% (0.2740) | Val:  70.27% | Time: 535.6s | ETA: 228.1m | LR: 0.012494
+     ✅ New best model saved! Val Acc: 70.27%
+
+📊 Epoch  78/100 | Train:  92.63% (0.2411) | Val:  69.82% | Time: 539.8s | ETA: 217.9m | LR: 0.011474
+
+📊 Epoch  79/100 | Train:  93.56% (0.2130) | Val:  69.46% | Time: 535.0s | ETA: 207.7m | LR: 0.010492
+
+🆕 Epoch  80/100 | Train:  94.16% (0.1922) | Val:  70.95% | Time: 536.3s | ETA: 197.6m | LR: 0.009549
+     ✅ New best model saved! Val Acc: 70.95%
+
+🆕 Epoch  81/100 | Train:  95.02% (0.1707) | Val:  71.16% | Time: 538.8s | ETA: 187.5m | LR: 0.008646
+     ✅ New best model saved! Val Acc: 71.16%
+
+🆕 Epoch  82/100 | Train:  95.66% (0.1479) | Val:  72.61% | Time: 539.0s | ETA: 177.5m | LR: 0.007784
+     ✅ New best model saved! Val Acc: 72.61%
+
+📊 Epoch  83/100 | Train:  96.50% (0.1239) | Val:  72.10% | Time: 539.2s | ETA: 167.4m | LR: 0.006963
+
+🆕 Epoch  84/100 | Train:  97.08% (0.1072) | Val:  72.80% | Time: 538.3s | ETA: 157.4m | LR: 0.006185
+     ✅ New best model saved! Val Acc: 72.80%
+
+🆕 Epoch  85/100 | Train:  97.59% (0.0922) | Val:  73.30% | Time: 543.2s | ETA: 147.4m | LR: 0.005450
+     ✅ New best model saved! Val Acc: 73.30%
+
+🆕 Epoch  86/100 | Train:  98.02% (0.0780) | Val:  73.58% | Time: 536.3s | ETA: 137.5m | LR: 0.004759
+     ✅ New best model saved! Val Acc: 73.58%
+
+📊 Epoch  87/100 | Train:  98.46% (0.0662) | Val:  73.40% | Time: 536.0s | ETA: 127.5m | LR: 0.004112
+
+🆕 Epoch  88/100 | Train:  98.71% (0.0572) | Val:  73.89% | Time: 532.4s | ETA: 117.6m | LR: 0.003511
+     ✅ New best model saved! Val Acc: 73.89%
+
+🆕 Epoch  89/100 | Train:  98.83% (0.0524) | Val:  74.03% | Time: 592.4s | ETA: 107.8m | LR: 0.002956
+     ✅ New best model saved! Val Acc: 74.03%
+
+🆕 Epoch  90/100 | Train:  99.10% (0.0457) | Val:  74.57% | Time: 687.6s | ETA:  98.2m | LR: 0.002447
+     ✅ New best model saved! Val Acc: 74.57%
+
+📊 Epoch  91/100 | Train:  99.25% (0.0415) | Val:  74.48% | Time: 688.2s | ETA:  88.5m | LR: 0.001985
+
+📊 Epoch  92/100 | Train:  99.34% (0.0378) | Val:  74.34% | Time: 684.7s | ETA:  78.8m | LR: 0.001571
+
+📊 Epoch  93/100 | Train:  99.35% (0.0361) | Val:  74.57% | Time: 684.9s | ETA:  69.1m | LR: 0.001204
+
+🆕 Epoch  94/100 | Train:  99.54% (0.0320) | Val:  74.70% | Time: 685.3s | ETA:  59.3m | LR: 0.000886
+     ✅ New best model saved! Val Acc: 74.70%
+
+📊 Epoch  95/100 | Train:  99.48% (0.0317) | Val:  74.58% | Time: 687.5s | ETA:  49.5m | LR: 0.000616
+
+🆕 Epoch  96/100 | Train:  99.51% (0.0312) | Val:  74.85% | Time: 685.1s | ETA:  39.7m | LR: 0.000394
+     ✅ New best model saved! Val Acc: 74.85%
+
+📊 Epoch  97/100 | Train:  99.54% (0.0297) | Val:  74.69% | Time: 689.0s | ETA:  29.8m | LR: 0.000222
+
+📊 Epoch  98/100 | Train:  99.60% (0.0288) | Val:  74.70% | Time: 684.8s | ETA:  19.9m | LR: 0.000099
+
+🆕 Epoch  99/100 | Train:  99.59% (0.0278) | Val:  74.86% | Time: 683.8s | ETA:  10.0m | LR: 0.000025
+     ✅ New best model saved! Val Acc: 74.86%
+
+📊 Epoch 100/100 | Train:  99.65% (0.0278) | Val:  74.70% | Time: 686.9s | ETA:   0.0m | LR: 0.000000
+
+============================================================
+🎉 Training completed!
+⏱️  Total time: 997.8 minutes
+🏆 Best validation accuracy: 74.86%
