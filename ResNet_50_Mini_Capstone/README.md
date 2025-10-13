@@ -256,15 +256,3 @@ pin_memory = False
 - [DawnBench](https://dawn.cs.stanford.edu/benchmark/)
 - [Fast.ai Imagenet Training](https://github.com/fastai/imagenet-fast)
 
-## 📄 License
-
-This project is for educational purposes as part of the ERA (Extensive Receptive Attention) course.
-
-## 👥 Authors
-
-Your Name(s) - Email(s)
-
----
-
-**Note**: This is a baseline implementation. You may need to adjust hyperparameters, add more data augmentation, or implement additional techniques to reach the target accuracy.
-
