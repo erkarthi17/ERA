@@ -1,0 +1,26 @@
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+pillow>=9.5.0
+
+# Data and preprocessing
+opencv-python>=4.7.0
+scikit-image>=0.20.0
+
+# Logging and visualization
+tensorboard>=2.13.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Utilities
+tqdm>=4.65.0
+pyyaml>=6.0
+pandas>=2.0.0
+
+# Optional: For distributed training
+# torch-ddp>=0.1.0  # Uncomment if using distributed training
+
+# Optional: For advanced optimizations
+# apex  # NVIDIA Apex for mixed precision (if needed)
+
