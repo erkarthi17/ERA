@@ -8,6 +8,10 @@ pillow>=9.5.0
 opencv-python>=4.7.0
 scikit-image>=0.20.0
 
+# Hugging Face datasets (for ImageNet)
+datasets>=4.0.0
+huggingface_hub>=0.15.0
+
 # Logging and visualization
 tensorboard>=2.13.0
 matplotlib>=3.7.0
