@@ -10,6 +10,7 @@ from typing import Dict, Optional
 from pathlib import Path
 import logging
 from datetime import datetime
+import sys
 
 
 def setup_logging(log_dir: str, name: str = "train") -> logging.Logger:
@@ -75,8 +76,10 @@ class AverageMeter:
         self.avg = self.sum / self.count
     
     def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
+        # Improved formatting for console output
+        # Example: Loss 0.1234 (0.1111)
+        # Acc@1 80.12 (79.50)
+        return f"{self.name} {self.val:{self.fmt}} ({self.avg:{self.fmt}})"
 
 
 class ProgressMeter:
@@ -86,16 +89,52 @@ class ProgressMeter:
         self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
         self.meters = meters
         self.prefix = prefix
-    
+        self.num_batches = num_batches # Ensure num_batches is stored
+
     def display(self, batch: int):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-    
+        
+        # Use carriage return to update the same line in the terminal
+        sys.stdout.write('\r' + '  '.join(entries))
+        sys.stdout.flush()
+
+        # At the very last batch, print a final newline to ensure the prompt appears on a new line.
+        # This avoids double newlines when logger.info also prints.
+        if batch == self.num_batches - 1:
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
     def _get_batch_fmtstr(self, num_batches: int):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+
+
+class Summary:
+    """
+    Computes and stores the average and current value.
+    This is for summarizing at the end of an epoch/validation.
+    """
+    def __init__(self, name: str, fmt: str = ':f'):
+        self.name = name
+        self.fmt = fmt
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val: float, n: int = 1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def __str__(self):
+        return f"{self.name}: {self.avg:{self.fmt}}"
 
 
 def accuracy(output: torch.Tensor, target: torch.Tensor, topk: tuple = (1, 5)):

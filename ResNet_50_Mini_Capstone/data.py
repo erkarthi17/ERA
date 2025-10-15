@@ -194,7 +194,7 @@ if __name__ == "__main__":
     from config import Config
     
     config = Config()
-    config.data_root = "/path/to/imagenet"  # Update this
+    config.data_root = "./data/imagenet"
     
     print("Creating data loaders...")
     print(f"Train path: {config.train_path}")
@@ -223,4 +223,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\nError loading data: {e}")
         print("Please update the data_root in config.py")
-

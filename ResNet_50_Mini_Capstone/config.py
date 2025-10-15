@@ -17,7 +17,7 @@ class Config:
     num_classes: int = 1000
     
     # Data parameters
-    data_root: str = "/path/to/imagenet"  # Update this path
+    data_root: str = "./data/imagenet"  # Default for testing
     train_dir: str = "train"
     val_dir: str = "val"
     num_workers: int = 8

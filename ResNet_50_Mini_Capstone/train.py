@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from tqdm import tqdm
 
 # Import our modules
 from config import Config
@@ -55,24 +56,23 @@ def train_one_epoch(
         scaler: Gradient scaler for mixed precision
     
     Returns:
-        Average training loss
+        Tuple of (average training loss, top1 accuracy, top5 accuracy)
     """
-    batch_time = AverageMeter('Time', ':6.3f')
-    data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(
-        len(train_loader),
-        [batch_time, data_time, losses, top1, top5],
-        prefix="Epoch: [{}]".format(epoch)
-    )
+    batch_time = AverageMeter('Time', '6.3f')
+    data_time = AverageMeter('Data', '6.3f')  
+    losses = AverageMeter('Loss', '.4e')     
+    top1 = AverageMeter('Acc@1', '6.2f') 
+    top5 = AverageMeter('Acc@5', '6.2f')     
     
     # Switch to train mode
     model.train()
     
+    # Create tqdm progress bar
+    pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.epochs}", 
+                leave=False, dynamic_ncols=True)
+    
     end = time.time()
-    for i, (images, target) in enumerate(train_loader):
+    for i, (images, target) in enumerate(pbar):
         # Measure data loading time
         data_time.update(time.time() - end)
         
@@ -107,15 +107,22 @@ def train_one_epoch(
         batch_time.update(time.time() - end)
         end = time.time()
         
-        # Print progress
+        # Update progress bar with current metrics
+        pbar.set_postfix({
+            'Loss': f'{losses.avg:.4f}',
+            'Acc@1': f'{top1.avg:.2f}%',
+            'Acc@5': f'{top5.avg:.2f}%',
+            'LR': f'{optimizer.param_groups[0]["lr"]:.6f}'
+        })
+        
+        # Log detailed progress at intervals
         if i % config.log_interval == 0:
-            progress.display(i)
             logger.info(
-                f"Epoch [{epoch}] Batch [{i}/{len(train_loader)}] "
+                f"Epoch [{epoch+1}] Batch [{i}/{len(train_loader)}] "
                 f"Loss: {losses.avg:.4f} Acc@1: {top1.avg:.2f}% Acc@5: {top5.avg:.2f}%"
             )
     
-    return losses.avg
+    return losses.avg, top1.avg, top5.avg
 
 
 def validate(val_loader, model, criterion, config, logger):
@@ -132,22 +139,20 @@ def validate(val_loader, model, criterion, config, logger):
     Returns:
         Tuple of (top-1 accuracy, top-5 accuracy, average loss)
     """
-    batch_time = AverageMeter('Time', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(
-        len(val_loader),
-        [batch_time, losses, top1, top5],
-        prefix='Test: '
-    )
-    
+    batch_time = AverageMeter('Time', '6.3f') 
+    losses = AverageMeter('Loss', '.4e')    
+    top1 = AverageMeter('Acc@1', '6.2f')
+    top5 = AverageMeter('Acc@5', '6.2f')
+
     # Switch to evaluation mode
     model.eval()
     
+    # Create tqdm progress bar for validation
+    pbar = tqdm(val_loader, desc="Validation", leave=False, dynamic_ncols=True)
+    
     with torch.no_grad():
         end = time.time()
-        for i, (images, target) in enumerate(val_loader):
+        for i, (images, target) in enumerate(pbar):
             # Move data to device
             images = images.to(config.device, non_blocking=True)
             target = target.to(config.device, non_blocking=True)
@@ -167,9 +172,12 @@ def validate(val_loader, model, criterion, config, logger):
             batch_time.update(time.time() - end)
             end = time.time()
             
-            # Print progress
-            if i % config.log_interval == 0:
-                progress.display(i)
+            # Update progress bar with current metrics
+            pbar.set_postfix({
+                'Loss': f'{losses.avg:.4f}',
+                'Acc@1': f'{top1.avg:.2f}%',
+                'Acc@5': f'{top5.avg:.2f}%'
+            })
         
         logger.info(
             f"Validation - Loss: {losses.avg:.4f} "
@@ -265,6 +273,10 @@ def main():
         config.resume = True
         config.resume_path = args.resume
     
+    # IMPORTANT: Re-calculate train_path and val_path after data_root has been potentially overridden
+    config.train_path = os.path.join(config.data_root, config.train_dir)
+    config.val_path = os.path.join(config.data_root, config.val_dir)
+    
     # Set device
     config.device = get_device(config)
     
@@ -320,11 +332,13 @@ def main():
     # Resume from checkpoint
     start_epoch = 0
     best_acc1 = 0.0
+    best_train_acc1 = 0.0
     if config.resume and config.resume_path:
         logger.info(f"\nResuming from checkpoint: {config.resume_path}")
         checkpoint = load_checkpoint(config.resume_path, model, optimizer, scheduler)
         start_epoch = checkpoint['epoch'] + 1
         best_acc1 = checkpoint.get('best_acc1', 0.0)
+        best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
     
     # Training loop
     logger.info("\n" + "="*80)
@@ -333,11 +347,11 @@ def main():
     
     for epoch in range(start_epoch, config.epochs):
         # Train for one epoch
-        logger.info(f"\nEpoch {epoch}/{config.epochs}")
+        logger.info(f"\nEpoch {epoch+1}/{config.epochs}")
         logger.info(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
         
-        with Timer(f"Epoch {epoch} training"):
-            train_loss = train_one_epoch(
+        with Timer(f"Epoch {epoch+1} training"):
+            train_loss, train_acc1, train_acc5 = train_one_epoch(
                 train_loader, model, criterion, optimizer,
                 epoch, config, logger, scaler
             )
@@ -345,9 +359,12 @@ def main():
         # Update learning rate
         scheduler.step()
         
+        # Track best training accuracy
+        best_train_acc1 = max(train_acc1, best_train_acc1)
+        
         # Validate
         if (epoch + 1) % config.eval_interval == 0:
-            with Timer(f"Epoch {epoch} validation"):
+            with Timer(f"Epoch {epoch+1} validation"):
                 acc1, acc5, val_loss = validate(val_loader, model, criterion, config, logger)
             
             # Check if best model
@@ -355,11 +372,19 @@ def main():
             best_acc1 = max(acc1, best_acc1)
             
             logger.info(
-                f"Epoch [{epoch}] - Train Loss: {train_loss:.4f} "
+                f"Epoch [{epoch+1}] - Train Loss: {train_loss:.4f} "
+                f"Train Acc@1: {train_acc1:.2f}% "
                 f"Val Loss: {val_loss:.4f} "
                 f"Val Acc@1: {acc1:.2f}% "
                 f"Val Acc@5: {acc5:.2f}% "
-                f"Best Acc@1: {best_acc1:.2f}%"
+                f"Best Train Acc@1: {best_train_acc1:.2f}% "
+                f"Best Val Acc@1: {best_acc1:.2f}%"
+            )
+        else:
+            logger.info(
+                f"Epoch [{epoch+1}] - Train Loss: {train_loss:.4f} "
+                f"Train Acc@1: {train_acc1:.2f}% "
+                f"Best Train Acc@1: {best_train_acc1:.2f}%"
             )
         
         # Save checkpoint
@@ -370,6 +395,7 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_acc1': best_acc1,
+                'best_train_acc1': best_train_acc1,
                 'config': config
             }
             save_checkpoint(
@@ -378,14 +404,14 @@ def main():
                 config.checkpoint_dir,
                 f'checkpoint_epoch_{epoch}.pth'
             )
-            logger.info(f"Saved checkpoint for epoch {epoch}")
+            logger.info(f"Saved checkpoint for epoch {epoch+1}")
     
     logger.info("\n" + "="*80)
     logger.info("Training completed!")
+    logger.info(f"Best training accuracy: {best_train_acc1:.2f}%")
     logger.info(f"Best validation accuracy: {best_acc1:.2f}%")
     logger.info("="*80)
 
 
 if __name__ == '__main__':
     main()
-
