@@ -20,6 +20,7 @@ This guide details the steps to set up and run the ResNet-50 training script (`t
 
 1.  **Clone the Repository (if not already done):**
     First, ensure you have the main `ResNet_50_Mini_Capstone` repository cloned. Navigate to your desired location (e.g., `/home/ubuntu/ERA`).
+    https://github.com/erkarthi17/ERA/tree/2d614ab2316ff810c720769d4c527293cb1519fb/ResNet_50_Mini_Capstone/EC2_Upload_Test(MiniSet)
     ```bash
     cd ResNet_50_Mini_Capstone/EC2_Upload_Test\(MiniSet\)
     ```
