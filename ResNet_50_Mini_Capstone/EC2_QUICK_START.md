@@ -37,6 +37,8 @@ source venv/bin/activate
 sudo mkdir -p /data/imagenet
 sudo chown -R $USER:$USER /data/imagenet
 
+aws s3 sync s3://imagenet-dataset-karthick-kannan /data/imagenet
+
 # Download ImageNet (this takes time!)
 # Option 1: From official source
 # Visit: https://www.image-net.org/download.php

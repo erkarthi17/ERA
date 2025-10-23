@@ -14,8 +14,8 @@ class Config(BaseConfig):
 
     # S3 specific parameters
     s3_bucket: str = "imagenet-dataset-karthick-kannan"
-    s3_prefix_train: str = "train/" # Path within S3 bucket for training data
-    s3_prefix_val: str = "val/"     # Path within S3 bucket for validation data
+    s3_prefix_train: str = "imagenet-1k/train/" # Path within S3 bucket for training data
+    s3_prefix_val: str = "imagenet-1k/val/"     # Path within S3 bucket for validation data
     
     # You might need to specify region if not configured globally on EC2
     s3_region: Optional[str] = None # e.g., "us-east-1"

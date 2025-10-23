@@ -27,7 +27,7 @@ class ImageNetS3Dataset(Dataset):
         self.idx_to_class = {}
 
         print(f"Listing files in s3://{s3_bucket}/{s3_prefix}...")
-        s3_paths = self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.JPEG") # Adjust extension if needed
+        s3_paths = self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.jpg") # Adjust extension if needed
 
         # Create a mapping of class names to indices
         class_names = sorted(list(set([path.split('/')[-2] for path in s3_paths])))
@@ -140,9 +140,9 @@ def get_data_loaders(config: Config) -> Tuple[DataLoader, DataLoader]:
 if __name__ == "__main__":
     # Test data loading
     config = Config()
-    config.s3_bucket = "your-imagenet-s3-bucket" # Replace with your S3 bucket name for testing
-    config.s3_prefix_train = "train/"
-    config.s3_prefix_val = "val/"
+    config.s3_bucket = "imagenet-dataset-karthick-kannan" # Replace with your S3 bucket name for testing
+    config.s3_prefix_train = "imagenet-1k/train/"
+    config.s3_prefix_val = "imagenet-1k/val/"
 
     print("Creating data loaders from S3...")
 
