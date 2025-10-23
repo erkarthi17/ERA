@@ -8,14 +8,13 @@ from threading import Lock
 
 # 🔧 Config
 HF_DATASET = "imagenet-1k"
-SPLITS = ["train", "validation"]
 S3_BUCKET = "imagenet-dataset-karthick-kannan"
-S3_PREFIX = "imagenet-1k"
-MAX_WORKERS = 12  # Recommended for t3.xlarge
-CHECKPOINT_FILE = "checkpoint.txt"
+S3_PREFIX = "imagenet-1k/test"
+MAX_WORKERS = 12  # Good for t3.xlarge
+CHECKPOINT_FILE = "checkpoint_test.txt"
 
 # 🧠 Auth
-HF_TOKEN = os.getenv("HF_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")  # Or paste your token directly
 s3 = boto3.client("s3")
 
 # 📦 Load checkpoint
@@ -36,16 +35,15 @@ upload_count = 0
 lock = Lock()
 
 # 🚀 Upload function
-def upload_if_missing(i, ex, split, uploaded_keys):
+def upload_if_missing(i, ex, uploaded_keys):
     global upload_count
-    label = ex["label"]
-    key = f"{S3_PREFIX}/{split}/{label}/{i:07d}.jpg"
+    key = f"{S3_PREFIX}/{i:07d}.jpg"
     if key in uploaded_keys:
         return
 
     img = ex["image"]
     if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")  # 💡 Strip alpha channel
+        img = img.convert("RGB")
 
     img_bytes = io.BytesIO()
     img.save(img_bytes, format="JPEG", quality=90)
@@ -57,26 +55,24 @@ def upload_if_missing(i, ex, split, uploaded_keys):
         with lock:
             upload_count += 1
             if upload_count % 1000 == 0:
-                print(f"✅ Uploaded {upload_count} files so far...")
+                print(f"✅ Uploaded {upload_count} test images so far...")
     except Exception as e:
         print(f"❌ Failed to upload {key}: {e}")
 
-
 # 🧵 Main loop
 uploaded_keys = load_checkpoint()
+print(f"\n🔄 Starting ImageNet test upload...")
 
-for split in SPLITS:
-    print(f"\n🔄 Processing split: {split}")
-    ds = load_dataset(HF_DATASET, split=split, streaming=True, token=HF_TOKEN)
+ds = load_dataset(HF_DATASET, split="test", streaming=True, token=HF_TOKEN)
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = []
-        for i, ex in enumerate(ds):
-            futures.append(executor.submit(upload_if_missing, i, ex, split, uploaded_keys))
-            if i % 1000 == 0:
-                print(f"📤 Queued {i} uploads...")
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    futures = []
+    for i, ex in enumerate(ds):
+        futures.append(executor.submit(upload_if_missing, i, ex, uploaded_keys))
+        if i % 1000 == 0:
+            print(f"📤 Queued {i} test uploads...")
 
-        for f in tqdm(futures, desc=f"Uploading {split}"):
-            f.result()
+    for f in tqdm(futures, desc="Uploading test split"):
+        f.result()
 
-print("\n✅ Parallel upload complete. Checkpoint updated.")
+print("\n✅ Test upload complete. Checkpoint updated.")
