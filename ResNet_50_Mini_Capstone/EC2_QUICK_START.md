@@ -5,7 +5,7 @@
 ### Step 1: Launch EC2 Instance
 
 ```bash
-# Recommended for testing: p3.2xlarge (1 GPU, 8 vCPU, 61 GB RAM)
+# Recommended for testing: p3.2xlarge (1 GPU, 8 vCPU, 61 GB RAM) but tested in g5* instance
 # AMI: Deep Learning AMI (Ubuntu) - PyTorch 2.0+
 ```
 
