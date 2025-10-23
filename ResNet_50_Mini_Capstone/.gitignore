@@ -25,6 +25,7 @@ venv/
 .env/
 ENV/
 .venv
+EC2_Upload_ImageNet1K/.env
 
 # PyTorch
 *.pth
