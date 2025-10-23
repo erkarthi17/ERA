@@ -13,7 +13,7 @@ S3_PREFIX = "imagenet-1k/test"
 MAX_WORKERS = 12  # Good for t3.xlarge
 CHECKPOINT_FILE = "checkpoint_test.txt"
 
-# 🧠 Auth
+# 🧠 Authentication, removed HF Auth Key hardcoded value
 HF_TOKEN = os.getenv("HF_TOKEN")  # Or paste your token directly
 s3 = boto3.client("s3")
 
