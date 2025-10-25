@@ -8,12 +8,13 @@ import sys
 import time
 from pathlib import Path
 from tqdm import tqdm
+import matlib.pyplot as plt
 
 # Import our modules from the local directory
 from .config import Config
-from ResNet_50_Mini_Capstone.model import resnet50 # Assuming model.py is in parent directory
+from .model import resnet50 # Assuming model.py is in parent directory
 from .data_s3 import get_data_loaders  # Use S3 data loader
-from ResNet_50_Mini_Capstone.utils import ( # Assuming utils.py is in parent directory
+from .utils import ( # Assuming utils.py is in parent directory
     setup_logging,
     AverageMeter,
     ProgressMeter,
@@ -251,6 +252,10 @@ def main():
     parser.add_argument('--train-subset', type=int, default=None, help='Training subset size (for testing)')
     parser.add_argument('--val-subset', type=int, default=None, help='Validation subset size (for testing)')
     parser.add_argument('--resume', type=str, default=None, help='Path to checkpoint to resume from')
+    parser.add_argument('--find-lr', action='store_true', help='Run learning rate finder') # New argument for LR Finder
+    parser.add_argument('--lr-finder-start-lr', type=float, default=1e-7, help='Start LR for LR finder') # New argument for LR Finder
+    parser.add_argument('--lr-finder-end-lr', type=float, default=1.0, help='End LR for LR finder') # New argument for LR Finder
+    parser.add_argument('--lr-finder-num-batches', type=int, default=100, help='Number of batches for LR finder') # New argument for LR Finder
     
     # S3 specific arguments
     parser.add_argument('--s3-bucket', type=str, default=None, help='S3 bucket name')
@@ -326,19 +331,25 @@ def main():
     else:
         criterion = nn.CrossEntropyLoss()
     
-    # Optimizer
+    # Optimizer (Learning rate will be overridden by LR Finder if active)
     optimizer = get_optimizer(model, config)
     logger.info(f"Using optimizer: {config.optimizer}")
-    
-    # Learning rate scheduler
-    scheduler = get_lr_scheduler(optimizer, config)
-    logger.info(f"Using scheduler: {config.lr_scheduler}")
     
     # Mixed precision training
     scaler = GradScaler() if config.mixed_precision else None
     if config.mixed_precision:
         logger.info("Using mixed precision training")
     
+    # Learning Rate Finder
+    if args.find_lr:
+        logger.info(f"\nRunning Learning Rate Finder from {args.lr_finder_start_lr:.7f} to {args.lr_finder_end_lr:.7f} for {args.lr_finder_num_batches} batches...")
+        find_learning_rate(
+            train_loader, model, criterion, optimizer, config.device,
+            args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler
+        )
+        logger.info("Learning Rate Finder complete. Check the plot for optimal LR.")
+        return # Exit after LR finding
+
     # Resume from checkpoint
     start_epoch = 0
     best_acc1 = 0.0
@@ -350,6 +361,10 @@ def main():
         best_acc1 = checkpoint.get('best_acc1', 0.0)
         best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
     
+    # Learning rate scheduler (only if not running LR finder)
+    scheduler = get_lr_scheduler(optimizer, config)
+    logger.info(f"Using scheduler: {config.lr_scheduler}")
+
     # Training loop
     logger.info("\n" + "="*80)
     logger.info("Starting training...")
@@ -374,7 +389,7 @@ def main():
         
         # Validate
         if (epoch + 1) % config.eval_interval == 0:
-            with Timer(f"Epoch {epoch+1} validation"):
+            with Timer(f"Epoch {epoch+1} validation"):\
                 acc1, acc5, val_loss = validate(val_loader, model, criterion, config, logger)
             
             # Check if best model
@@ -418,9 +433,68 @@ def main():
     
     logger.info("\n" + "="*80)
     logger.info("Training completed!")
-    logger.info(f"Best training accuracy: {best_train_acc1:.2f}%")
-    logger.info(f"Best validation accuracy: {best_acc1:.2f}%")
+    logger.info(f"Best training accuracy: {best_train_acc1:.2f}%\n")
+    logger.info(f"Best validation accuracy: {best_acc1:.2f}%\n")
     logger.info("="*80)
+
+
+def find_learning_rate(
+    train_loader, model, criterion, optimizer, device,
+    start_lr, end_lr, num_batches, scaler
+):
+    """
+    Runs a learning rate finder.
+    """
+    model.train()
+    lrs = []
+    losses = []
+    
+    # Temporarily set the learning rate to start_lr
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = start_lr
+
+    # Exponentially increase learning rate
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=(end_lr/start_lr)**(1/(num_batches-1)))
+
+    for i, (images, target) in enumerate(train_loader):
+        if i >= num_batches:
+            break
+
+        images = images.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
+
+        # Forward pass with mixed precision
+        with autocast(enabled=(scaler is not None)):
+            output = model(images)
+            loss = criterion(output, target)
+        
+        # Record LR and loss
+        lrs.append(optimizer.param_groups[0]['lr'])
+        losses.append(loss.item())
+
+        # Backward pass
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
+        
+        # Step LR
+        lr_scheduler.step()
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    plt.plot(lrs, losses)
+    plt.xscale('log')
+    plt.xlabel('Learning Rate (log scale)')
+    plt.ylabel('Loss')
+    plt.title('Learning Rate Finder')
+    plt.grid(True, which="both", ls="-")
+    plt.savefig(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lr_finder_plot.png'))
+    plt.show() # Display the plot (might not show on EC2 without X forwarding)
 
 
 if __name__ == '__main__':

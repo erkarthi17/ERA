@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import os
 from typing import Optional
-from ResNet_50_Mini_Capstone.config import Config as BaseConfig
+from .base_config import Config as BaseConfig
 
 @dataclass
 class Config(BaseConfig):
@@ -15,7 +15,7 @@ class Config(BaseConfig):
     # S3 specific parameters
     s3_bucket: str = "imagenet-dataset-karthick-kannan"  
     s3_prefix_train: str = "imagenet-1k/train/" # Path within S3 bucket for training data
-    s3_prefix_val: str = "imagenet-1k/val/"     # Path within S3 bucket for validation data
+    s3_prefix_val: str = "imagenet-1k/validation/"     # Path within S3 bucket for validation data
     
     # You might need to specify region if not configured globally on EC2
     s3_region: Optional[str] = None # e.g., "us-east-1"
