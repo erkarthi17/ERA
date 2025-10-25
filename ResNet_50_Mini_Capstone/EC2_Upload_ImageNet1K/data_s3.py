@@ -124,7 +124,8 @@ def get_data_loaders(config: Config) -> Tuple[DataLoader, DataLoader]:
         shuffle=True,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        drop_last=True
+        drop_last=True,
+        multiprocessing_context='forkserver'
     )
     val_loader = DataLoader(
         val_dataset,
@@ -132,7 +133,8 @@ def get_data_loaders(config: Config) -> Tuple[DataLoader, DataLoader]:
         shuffle=False,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        drop_last=False
+        drop_last=False,
+        multiprocessing_context='forkserver'
     )
     
     return train_loader, val_loader
