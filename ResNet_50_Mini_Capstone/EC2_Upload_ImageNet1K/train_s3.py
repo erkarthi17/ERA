@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 from tqdm import tqdm
-import matlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 # Import our modules from the local directory
 from .config import Config
