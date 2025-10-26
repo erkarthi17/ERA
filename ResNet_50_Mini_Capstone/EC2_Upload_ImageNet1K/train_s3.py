@@ -240,6 +240,65 @@ def get_lr_scheduler(optimizer, config):
     
     return scheduler
 
+def find_learning_rate(
+    train_loader, model, criterion, optimizer, device,
+    start_lr, end_lr, num_batches, scaler
+):
+    """
+    Runs a learning rate finder.
+    """
+    model.train()
+    lrs = []
+    losses = []
+    
+    # Temporarily set the learning rate to start_lr
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = start_lr
+
+    # Exponentially increase learning rate
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=(end_lr/start_lr)**(1/(num_batches-1)))
+
+    for i, (images, target) in enumerate(train_loader):
+        if i >= num_batches:
+            break
+
+        images = images.to(device, non_blocking=True)
+        target = target.to(device, non_blocking=True)
+
+        # Forward pass with mixed precision
+        with autocast(enabled=(scaler is not None)):
+            output = model(images)
+            loss = criterion(output, target)
+        
+        # Record LR and loss
+        lrs.append(optimizer.param_groups[0]['lr'])
+        losses.append(loss.item())
+
+        # Backward pass
+        optimizer.zero_grad()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
+        
+        # Step LR
+        lr_scheduler.step()
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    plt.plot(lrs, losses)
+    plt.xscale('log')
+    plt.xlabel('Learning Rate (log scale)')
+    plt.ylabel('Loss')
+    plt.title('Learning Rate Finder')
+    plt.grid(True, which="both", ls="-")
+    plt.savefig(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lr_finder_plot.png'))
+    plt.show() # Display the plot (might not show on EC2 without X forwarding)
+    plt.close() # Close figure to free memory
+
 
 def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1s, val_acc1s, lrs, log_dir, logger, eval_interval):
     """
