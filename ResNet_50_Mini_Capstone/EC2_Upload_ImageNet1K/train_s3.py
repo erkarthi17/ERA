@@ -241,6 +241,67 @@ def get_lr_scheduler(optimizer, config):
     return scheduler
 
 
+def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1s, val_acc1s, lrs, log_dir, logger, eval_interval):
+    """
+    Generates and saves plots for training and validation metrics.
+    """
+    epochs_for_plot = list(range(start_epoch + 1, total_epochs + 1))
+
+    # Filter validation metrics for plotting if eval_interval > 1 or some epochs had no validation
+    val_epochs_to_plot = []
+    filtered_val_losses = []
+    filtered_val_acc1s = []
+
+    for i, current_epoch_num in enumerate(epochs_for_plot):
+        # Check if validation was performed for this specific epoch in the current run
+        # and if the stored value is not None (in case of eval_interval > 1)
+        if val_losses[i] is not None: 
+            val_epochs_to_plot.append(current_epoch_num)
+            filtered_val_losses.append(val_losses[i])
+            filtered_val_acc1s.append(val_acc1s[i])
+
+    # Plot Loss
+    plt.figure(figsize=(14, 6)) # Wider figure to accommodate two subplots easily
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs_for_plot, train_losses, label='Training Loss')
+    if filtered_val_losses: # Only plot if there's actual validation data
+        plt.plot(val_epochs_to_plot, filtered_val_losses, label='Validation Loss')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+
+    # Plot Accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs_for_plot, train_acc1s, label='Training Acc@1')
+    if filtered_val_acc1s: # Only plot if there's actual validation data
+        plt.plot(val_epochs_to_plot, filtered_val_acc1s, label='Validation Acc@1')
+    plt.title('Training and Validation Accuracy (Top-1)')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy (%)')
+    plt.legend()
+    plt.grid(True)
+    
+    plot_path_loss_acc = os.path.join(log_dir, 'training_history_loss_acc.png')
+    plt.tight_layout() # Adjust layout to prevent overlapping titles/labels
+    plt.savefig(plot_path_loss_acc)
+    logger.info(f"Saved training history (loss/accuracy) plot to {plot_path_loss_acc}")
+    plt.close() # Close figure to free memory
+
+    # Plot Learning Rate
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs_for_plot, lrs, label='Learning Rate')
+    plt.title('Learning Rate Schedule')
+    plt.xlabel('Epoch')
+    plt.ylabel('Learning Rate')
+    plt.grid(True)
+    lr_plot_path = os.path.join(log_dir, 'learning_rate_schedule.png')
+    plt.savefig(lr_plot_path)
+    logger.info(f"Saved learning rate schedule plot to {lr_plot_path}")
+    plt.close() # Close figure
+
+
 def main():
     """Main training function."""
     # Parse arguments
@@ -369,21 +430,33 @@ def main():
     # The scheduler is already initialized and potentially updated by load_checkpoint
     # No need to re-initialize here.
 
+    # Metrics storage for plotting
+    history_train_losses = []
+    history_train_acc1s = []
+    history_val_losses = []
+    history_val_acc1s = []
+    history_lrs = []
+
+
     # Training loop
     logger.info("\n" + "="*80)
     logger.info("Starting training...")
     logger.info("="*80)
     
     for epoch in range(start_epoch, config.epochs):
-        # Train for one epoch
         logger.info(f"\nEpoch {epoch+1}/{config.epochs}")
-        logger.info(f"Learning rate: {optimizer.param_groups[0]['lr']:.6f}")
-        
+        current_lr = optimizer.param_groups[0]['lr']
+        logger.info(f"Learning rate: {current_lr:.6f}")
+        history_lrs.append(current_lr) # Capture LR at the start of epoch
+
         with Timer(f"Epoch {epoch+1} training"):
             train_loss, train_acc1, train_acc5 = train_one_epoch(
                 train_loader, model, criterion, optimizer,
                 epoch, config, logger, scaler
             )
+        
+        history_train_losses.append(train_loss)
+        history_train_acc1s.append(train_acc1)
         
         # Update learning rate
         scheduler.step()
@@ -395,6 +468,9 @@ def main():
         if (epoch + 1) % config.eval_interval == 0:
             with Timer(f"Epoch {epoch+1} validation"):\
                 acc1, acc5, val_loss = validate(val_loader, model, criterion, config, logger)
+            
+            history_val_losses.append(val_loss)
+            history_val_acc1s.append(acc1)
             
             # Check if best model
             is_best = acc1 > best_acc1
@@ -410,6 +486,9 @@ def main():
                 f"Best Val Acc@1: {best_acc1:.2f}%"
             )
         else:
+            # If validation doesn't run for this epoch, append None for consistency in plots
+            history_val_losses.append(None)
+            history_val_acc1s.append(None)
             logger.info(
                 f"Epoch [{epoch+1}] - Train Loss: {train_loss:.4f} "
                 f"Train Acc@1: {train_acc1:.2f}% "
@@ -441,64 +520,21 @@ def main():
     logger.info(f"Best validation accuracy: {best_acc1:.2f}%\n")
     logger.info("="*80)
 
-
-def find_learning_rate(
-    train_loader, model, criterion, optimizer, device,
-    start_lr, end_lr, num_batches, scaler
-):
-    """
-    Runs a learning rate finder.
-    """
-    model.train()
-    lrs = []
-    losses = []
-    
-    # Temporarily set the learning rate to start_lr
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = start_lr
-
-    # Exponentially increase learning rate
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=(end_lr/start_lr)**(1/(num_batches-1)))
-
-    for i, (images, target) in enumerate(train_loader):
-        if i >= num_batches:
-            break
-
-        images = images.to(device, non_blocking=True)
-        target = target.to(device, non_blocking=True)
-
-        # Forward pass with mixed precision
-        with autocast(enabled=(scaler is not None)):
-            output = model(images)
-            loss = criterion(output, target)
-        
-        # Record LR and loss
-        lrs.append(optimizer.param_groups[0]['lr'])
-        losses.append(loss.item())
-
-        # Backward pass
-        optimizer.zero_grad()
-        if scaler is not None:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            optimizer.step()
-        
-        # Step LR
-        lr_scheduler.step()
-
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    plt.plot(lrs, losses)
-    plt.xscale('log')
-    plt.xlabel('Learning Rate (log scale)')
-    plt.ylabel('Loss')
-    plt.title('Learning Rate Finder')
-    plt.grid(True, which="both", ls="-")
-    plt.savefig(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lr_finder_plot.png'))
-    plt.show() # Display the plot (might not show on EC2 without X forwarding)
+    # Plotting at the end
+    logger.info("Generating training history plots...")
+    plot_metrics(
+        start_epoch, 
+        config.epochs, 
+        history_train_losses,
+        history_val_losses,
+        history_train_acc1s,
+        history_val_acc1s,
+        history_lrs,
+        config.log_dir,
+        logger,
+        config.eval_interval
+    )
+    logger.info("Training history plots generated and saved.")
 
 
 if __name__ == '__main__':
