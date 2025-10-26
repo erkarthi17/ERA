@@ -33,7 +33,12 @@ class ImageNetS3Dataset(Dataset):
         print(f"Listing files in s3://{s3_bucket}/{s3_prefix}...")
         try:
             # More efficient way to glob for multiple extensions
-            s3_paths = self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.{[jJ][pP][eE]?[gG], [Jj][Pp][Gg]}")
+                        # More robust way to glob for multiple case-insensitive extensions
+            s3_paths = []
+            s3_paths.extend(self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.jpg"))
+            s3_paths.extend(self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.jpeg"))
+            s3_paths.extend(self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.JPG"))
+            s3_paths.extend(self.s3.glob(f"{s3_bucket}/{s3_prefix}**/*.JPEG"))
 
             if not s3_paths:
                 raise FileNotFoundError(f"No image files found in s3://{s3_bucket}/{s3_prefix}")
