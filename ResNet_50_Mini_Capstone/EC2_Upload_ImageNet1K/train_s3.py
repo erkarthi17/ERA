@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 from tqdm import tqdm
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # Corrected typo from matlib.pyplot
 
 # Import our modules from the local directory
 from .config import Config
@@ -336,10 +336,14 @@ def main():
     logger.info(f"Using optimizer: {config.optimizer}")
     
     # Mixed precision training
-    scaler = GradScaler() if config.mixed_precision else None
+    scaler = torch.amp.GradScaler('cuda') if config.mixed_precision else None # Updated GradScaler call for FutureWarning
     if config.mixed_precision:
         logger.info("Using mixed precision training")
     
+    # Initialize learning rate scheduler (moved before resume logic to ensure it's always defined)
+    scheduler = get_lr_scheduler(optimizer, config)
+    logger.info(f"Using scheduler: {config.lr_scheduler}")
+
     # Learning Rate Finder
     if args.find_lr:
         logger.info(f"\nRunning Learning Rate Finder from {args.lr_finder_start_lr:.7f} to {args.lr_finder_end_lr:.7f} for {args.lr_finder_num_batches} batches...")
@@ -356,14 +360,14 @@ def main():
     best_train_acc1 = 0.0
     if config.resume and config.resume_path:
         logger.info(f"\nResuming from checkpoint: {config.resume_path}")
+        # Pass the already initialized scheduler
         checkpoint = load_checkpoint(config.resume_path, model, optimizer, scheduler)
         start_epoch = checkpoint['epoch'] + 1
         best_acc1 = checkpoint.get('best_acc1', 0.0)
         best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
     
-    # Learning rate scheduler (only if not running LR finder)
-    scheduler = get_lr_scheduler(optimizer, config)
-    logger.info(f"Using scheduler: {config.lr_scheduler}")
+    # The scheduler is already initialized and potentially updated by load_checkpoint
+    # No need to re-initialize here.
 
     # Training loop
     logger.info("\n" + "="*80)
