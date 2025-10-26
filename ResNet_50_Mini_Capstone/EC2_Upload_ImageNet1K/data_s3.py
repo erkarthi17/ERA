@@ -130,12 +130,13 @@ def get_data_loaders(config):
     # This helps avoid 'fork-safe' issues with s3fs on some systems (e.g., Linux default 'fork')
     # 'forkserver' or 'spawn' are safer alternatives.
     mp_context = None
-    if multiprocessing.get_start_method(allow_none=True) == 'fork':
-        # Check if 'forkserver' is available, otherwise fall back to 'spawn'
+    if config.num_workers > 0: # Only set context if workers are actually used
         if 'forkserver' in multiprocessing.get_all_start_methods():
             mp_context = 'forkserver'
         elif 'spawn' in multiprocessing.get_all_start_methods():
             mp_context = 'spawn'
+        else:
+            print("Warning: Neither 'forkserver' nor 'spawn' available. DataLoader might fail.")
     
     print(f"Using multiprocessing context for DataLoader: {mp_context}")
 
