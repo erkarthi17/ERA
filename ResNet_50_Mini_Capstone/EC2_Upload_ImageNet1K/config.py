@@ -33,10 +33,11 @@ class Config(BaseConfig):
 
     def __post_init__(self):
         """Validate and set derived parameters."""
-        # Ensure checkpoint and log directories exist relative to the project root
-        project_root = os.path.join(os.path.dirname(__file__), "..", "..")
-        self.checkpoint_dir = os.path.join(project_root, "checkpoints")
-        self.log_dir = os.path.join(project_root, "logs")
+        # Ensure checkpoint and log directories exist relative to the current script's directory
+        # This will place 'checkpoints' and 'logs' folders directly inside 'EC2_Upload_ImageNet1K'
+        base_dir = os.path.dirname(__file__)
+        self.checkpoint_dir = os.path.join(base_dir, "checkpoints")
+        self.log_dir = os.path.join(base_dir, "logs")
 
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
