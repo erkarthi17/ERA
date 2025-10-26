@@ -24,6 +24,13 @@ class Config(BaseConfig):
     # But primary image loading will be from S3
     hf_dataset_name: str = "imagenet-1k" 
 
+    # --- Added/Modified for Checkpointing ---
+    # Save checkpoint every N epochs
+    save_every: int = 1 
+    # Evaluate model every N epochs (important for 'is_best' checkpointing)
+    eval_interval: int = 1
+    # --- End of Checkpointing changes ---
+
     def __post_init__(self):
         """Validate and set derived parameters."""
         # Ensure checkpoint and log directories exist relative to the project root
