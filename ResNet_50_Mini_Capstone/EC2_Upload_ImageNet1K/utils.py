@@ -209,7 +209,7 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
     print(f"Loading checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     
     # Load model state
     model.load_state_dict(checkpoint['model_state_dict'])
