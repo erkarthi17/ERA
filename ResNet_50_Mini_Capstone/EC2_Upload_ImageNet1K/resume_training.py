@@ -3,7 +3,7 @@ import os
 
 # --- CONFIG ---
 EC2_USER = "ubuntu"
-EC2_HOST = "18.133.77.135" # Ensure this is your current EC2 Public IP
+EC2_HOST = "ec2-18-171-242-38.eu-west-2.compute.amazonaws.com" # Use EC2 Public DNS for more stable connections
 KEY_PATH = "C:/Users/erkar/Downloads/ERAV4_EC2_V1_KEYPAIR.pem" # Ensure this path is correct on your local machine
 PROJECT_PATH = "/home/ubuntu/ERA/ResNet_50_Mini_Capstone"
 VENV_PATH = f"{PROJECT_PATH}/venv/bin/activate" # CORRECTED: Changed 'vevn' to 'venv'
