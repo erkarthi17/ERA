@@ -40,6 +40,7 @@ def train_one_epoch(
     config,
     logger,
     scaler=None,
+    scheduler=None,
     start_batch_idx=0, # New: Parameter to start training from a specific batch
     current_best_acc1=0.0, # New: Pass current best_acc1 for mid-epoch checkpointing
     current_best_train_acc1=0.0 # New: Pass current best_train_acc1 for mid-epoch checkpointing
@@ -573,6 +574,7 @@ def main():
             train_loss, train_acc1, train_acc5 = train_one_epoch(
                 train_loader, model, criterion, optimizer,
                 epoch, config, logger, scaler,
+                scheduler=scheduler,
                 start_batch_idx=start_batch_idx, # Pass start_batch_idx
                 current_best_acc1=best_acc1, # Pass current best_acc1
                 current_best_train_acc1=best_train_acc1 # Pass current best_train_acc1
