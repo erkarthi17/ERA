@@ -242,7 +242,7 @@ def get_lr_scheduler(optimizer, config):
 
 def find_learning_rate(
     train_loader, model, criterion, optimizer, device,
-    start_lr, end_lr, num_batches, scaler
+    start_lr, end_lr, num_batches, scaler, logger # Added logger here
 ):
     """
     Runs a learning rate finder.
@@ -251,6 +251,8 @@ def find_learning_rate(
     lrs = []
     losses = []
     
+    logger.info(f"Starting LR Finder: from {start_lr:.7f} to {end_lr:.7f} over {num_batches} batches.") # Added logging
+    
     # Temporarily set the learning rate to start_lr
     for param_group in optimizer.param_groups:
         param_group['lr'] = start_lr
@@ -258,7 +260,10 @@ def find_learning_rate(
     # Exponentially increase learning rate
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=(end_lr/start_lr)**(1/(num_batches-1)))
 
-    for i, (images, target) in enumerate(train_loader):
+    # Create tqdm progress bar for LR finder
+    pbar = tqdm(enumerate(train_loader), total=num_batches, desc="LR Finder", leave=False, dynamic_ncols=True) # Added tqdm
+
+    for i, (images, target) in pbar: # Iterate using pbar
         if i >= num_batches:
             break
 
@@ -271,9 +276,16 @@ def find_learning_rate(
             loss = criterion(output, target)
         
         # Record LR and loss
-        lrs.append(optimizer.param_groups[0]['lr'])
+        current_lr = optimizer.param_groups[0]['lr'] # Get current LR before step
+        lrs.append(current_lr)
         losses.append(loss.item())
 
+        # Update progress bar with current LR and loss
+        pbar.set_postfix({
+            'Loss': f'{loss.item():.4f}',
+            'LR': f'{current_lr:.6f}'
+        })
+        
         # Backward pass
         optimizer.zero_grad()
         if scaler is not None:
@@ -287,6 +299,8 @@ def find_learning_rate(
         # Step LR
         lr_scheduler.step()
 
+    logger.info("LR Finder batches processed. Plotting results...") # Added logging
+    
     # Plotting
     plt.figure(figsize=(10, 6))
     plt.plot(lrs, losses)
@@ -469,7 +483,8 @@ def main():
         logger.info(f"\nRunning Learning Rate Finder from {args.lr_finder_start_lr:.7f} to {args.lr_finder_end_lr:.7f} for {args.lr_finder_num_batches} batches...")
         find_learning_rate(
             train_loader, model, criterion, optimizer, config.device,
-            args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler
+            args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler,
+            logger # New: Pass the logger instance
         )
         logger.info("Learning Rate Finder complete. Check the plot for optimal LR.")
         return # Exit after LR finding
@@ -525,7 +540,7 @@ def main():
         
         # Validate
         if (epoch + 1) % config.eval_interval == 0:
-            with Timer(f"Epoch {epoch+1} validation"):\
+            with Timer(f"Epoch {epoch+1} validation"):
                 acc1, acc5, val_loss = validate(val_loader, model, criterion, config, logger)
             
             history_val_losses.append(val_loss)
