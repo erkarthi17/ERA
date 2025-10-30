@@ -31,6 +31,8 @@ class Config(BaseConfig):
     save_every: int = 1
     # Evaluate model every N epochs (important for 'is_best' checkpointing)
     eval_interval: int = 1
+    # New: Save checkpoint every N batches within an epoch
+    save_every_n_batches: Optional[int] = 500 # Set to an integer like 500 to enable batch-level saving
     # --- End of Checkpointing changes ---
 
     # --- S3 Caching Configuration (New) ---

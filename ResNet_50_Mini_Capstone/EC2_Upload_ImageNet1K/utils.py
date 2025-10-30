@@ -278,7 +278,11 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
     if lr_scheduler is not None and 'scheduler_state_dict' in checkpoint:
         lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     
-    current_logger.info(f"Loaded checkpoint from epoch {checkpoint['epoch']} with best_acc1: {checkpoint.get('best_acc1', 0):.2f}%")
+    current_logger.info(
+        f"Loaded checkpoint from epoch {checkpoint.get('epoch', 'N/A')}"
+        f" batch {checkpoint.get('batch_idx', 'N/A')}" # Added batch_idx
+        f" with best_acc1: {checkpoint.get('best_acc1', 0):.2f}%"
+    )
     
     return checkpoint
 
@@ -302,7 +306,8 @@ def get_latest_s3_checkpoint(s3_bucket: str, s3_prefix: str, logger: Optional[lo
                 for obj in page["Contents"]:
                     object_key = obj["Key"]
                     # We are looking for checkpoint files created by save_checkpoint, not best models
-                    # The pattern ensures we pick checkpoint_s3_epoch_N.pth, not model_best.pth
+                    # The pattern ensures we pick checkpoint_s3_epoch_N.pth or checkpoint_s3_epoch_N_batch_M.pth
+                    # The `LastModified` time ensures we pick the truly latest one.
                     if object_key.startswith(s3_prefix) and object_key.endswith('.pth') and 'checkpoint_s3_epoch_' in object_key:
                         modified_time = obj["LastModified"]
                         
