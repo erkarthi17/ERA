@@ -202,28 +202,31 @@ def validate(val_loader, model, criterion, config, logger):
 
 def get_optimizer(model, config):
     """Initialize optimizer based on configuration."""
-    if config.optimizer.lower() == 'sgd':
+    opt_name = config.optimizer.lower()
+    if opt_name == "sgd":
         optimizer = optim.SGD(
             model.parameters(),
             lr=config.learning_rate,
             momentum=config.momentum,
-            weight_decay=config.weight_decay
+            weight_decay=config.weight_decay,
+            nesterov=getattr(config, "nesterov", False)
         )
-    elif config.optimizer.lower() == 'adam':
+    elif opt_name == "adam":
         optimizer = optim.Adam(
             model.parameters(),
             lr=config.learning_rate,
             weight_decay=config.weight_decay
         )
-    elif config.optimizer.lower() == 'adamw':
+    elif opt_name == "adamw":
         optimizer = optim.AdamW(
             model.parameters(),
             lr=config.learning_rate,
             weight_decay=config.weight_decay
         )
     else:
-        raise ValueError(f"Unsupported optimizer: {config.optimizer}")
+        raise ValueError(f"Unsupported optimizer type: {config.optimizer}")
     return optimizer
+
 
 
 def get_lr_scheduler(optimizer, config):
