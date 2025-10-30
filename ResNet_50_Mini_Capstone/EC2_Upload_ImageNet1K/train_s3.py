@@ -396,6 +396,10 @@ def main():
     parser.add_argument('--s3-prefix-train', type=str, default=None, help='S3 prefix for training data')
     parser.add_argument('--s3-prefix-val', type=str, default=None, help='S3 prefix for validation data')
     
+    # S3 Caching arguments (new)
+    parser.add_argument('--cache-dir', type=str, default='./.s3_cache', help='Directory for S3 file list cache')
+    parser.add_argument('--force-relist-s3', action='store_true', help='Force re-listing S3 files, ignoring cache')
+
     args = parser.parse_args()
     
     # Load configuration
@@ -423,6 +427,10 @@ def main():
     # Add subset sizes to config
     config.train_subset_size = args.train_subset
     config.val_subset_size = args.val_subset
+
+    # Apply S3 Caching config from command line (new)
+    config.cache_dir = args.cache_dir
+    config.force_relist_s3 = args.force_relist_s3
     
     # Set device
     config.device = get_device(config)
@@ -438,6 +446,8 @@ def main():
     logger.info(f"\n{config}")
     logger.info(f"Train subset size: {config.train_subset_size}")
     logger.info(f"Val subset size: {config.val_subset_size}")
+    logger.info(f"S3 Cache Directory: {config.cache_dir}")
+    logger.info(f"Force S3 Relist: {config.force_relist_s3}")
     
     # Create model
     logger.info(f"\nCreating ResNet-50 model...")
