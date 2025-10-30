@@ -188,7 +188,15 @@ def save_checkpoint(
         s3_bucket: S3 bucket to upload to (optional)
         s3_prefix: S3 prefix (folder) within the bucket to upload to (optional)
     """
-    logger = logging.getLogger(state.get('config', {}).get('checkpoint_name', 'default')) # Get logger based on checkpoint name
+    # Get checkpoint name safely, whether config is dict or Config object
+    cfg = state.get('config', None)
+    if isinstance(cfg, dict):
+        ckpt_name = cfg.get('checkpoint_name', 'default')
+    elif hasattr(cfg, 'checkpoint_name'):
+        ckpt_name = cfg.checkpoint_name
+    else:
+        ckpt_name = 'default'
+    logger = logging.getLogger(ckpt_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # Save regular checkpoint locally
