@@ -167,31 +167,179 @@ def train_one_epoch(
 
 
 def validate(val_loader, model, criterion, config, logger):
-    # ... existing code (no changes needed here) ...
-    pass
+    """Run evaluation on validation set."""
+    batch_time = AverageMeter('Time', '6.3f')
+    losses = AverageMeter('Loss', '.4e')
+    top1 = AverageMeter('Acc@1', '6.2f')
+    top5 = AverageMeter('Acc@5', '6.2f')
+
+    model.eval()
+    with torch.no_grad():
+        end = time.time()
+        for i, (images, target) in enumerate(tqdm(val_loader, desc="Validating", leave=False, dynamic_ncols=True)):
+            images = images.to(config.device, non_blocking=True)
+            target = target.to(config.device, non_blocking=True)
+
+            with autocast(enabled=config.mixed_precision):
+                output = model(images)
+                loss = criterion(output, target)
+
+            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            losses.update(loss.item(), images.size(0))
+            top1.update(acc1[0], images.size(0))
+            top5.update(acc5[0], images.size(0))
+
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+        logger.info(
+            f"Validation Results - Loss: {losses.avg:.4f}, "
+            f"Acc@1: {top1.avg:.2f}%, Acc@5: {top5.avg:.2f}%"
+        )
+
+    return top1.avg, top5.avg, losses.avg
 
 
 def get_optimizer(model, config):
-    # ... existing code ...
-    pass
+    """Initialize optimizer based on configuration."""
+    if config.optimizer.lower() == 'sgd':
+        optimizer = optim.SGD(
+            model.parameters(),
+            lr=config.learning_rate,
+            momentum=config.momentum,
+            weight_decay=config.weight_decay
+        )
+    elif config.optimizer.lower() == 'adam':
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay
+        )
+    elif config.optimizer.lower() == 'adamw':
+        optimizer = optim.AdamW(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay
+        )
+    else:
+        raise ValueError(f"Unsupported optimizer: {config.optimizer}")
+    return optimizer
 
 
 def get_lr_scheduler(optimizer, config):
-    # ... existing code ...
-    pass
+    """Create learning rate scheduler."""
+    if config.lr_scheduler.lower() == 'step':
+        scheduler = optim.lr_scheduler.StepLR(
+            optimizer,
+            step_size=config.lr_step_size,
+            gamma=config.lr_gamma
+        )
+    elif config.lr_scheduler.lower() == 'cosine':
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=config.epochs
+        )
+    elif config.lr_scheduler.lower() == 'multistep':
+        scheduler = optim.lr_scheduler.MultiStepLR(
+            optimizer,
+            milestones=config.lr_milestones,
+            gamma=config.lr_gamma
+        )
+    elif config.lr_scheduler.lower() == 'onecycle':
+        scheduler = optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=config.learning_rate,
+            epochs=config.epochs,
+            steps_per_epoch=config.steps_per_epoch
+        )
+    else:
+        raise ValueError(f"Unsupported scheduler: {config.lr_scheduler}")
+    return scheduler
 
 
 def find_learning_rate(
     train_loader, model, criterion, optimizer, device,
     start_lr, end_lr, num_batches, scaler, logger
 ):
-    # ... existing code ...
-    pass
+    """Perform a simple LR range test."""
+    model.train()
+    lrs = []
+    losses = []
+    best_loss = float('inf')
+    lr_lambda = lambda x: (end_lr / start_lr) ** (x / num_batches)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    
+    for batch_idx, (images, target) in enumerate(tqdm(train_loader, total=num_batches, desc="LR Finder")):
+        if batch_idx > num_batches:
+            break
+        images = images.to(device)
+        target = target.to(device)
+
+        optimizer.zero_grad()
+        with autocast(enabled=scaler is not None):
+            outputs = model(images)
+            loss = criterion(outputs, target)
+
+        if scaler:
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            optimizer.step()
+
+        scheduler.step()
+        current_lr = optimizer.param_groups[0]["lr"]
+        lrs.append(current_lr)
+        losses.append(loss.item())
+
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+        if loss.item() > 4 * best_loss:
+            logger.info("Loss diverged; stopping LR finder.")
+            break
+
+    plt.figure()
+    plt.plot(lrs, losses)
+    plt.xscale('log')
+    plt.xlabel("Learning Rate (log scale)")
+    plt.ylabel("Loss")
+    plt.title("Learning Rate Finder")
+    plt.grid(True)
+    lr_finder_path = os.path.join("lr_finder.png")
+    plt.savefig(lr_finder_path)
+    logger.info(f"LR Finder plot saved to {lr_finder_path}")
+    plt.close()
 
 
 def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1s, val_acc1s, lrs, log_dir, logger, eval_interval):
-    # ... existing code ...
-    pass
+    """Plot training metrics."""
+    epochs = list(range(start_epoch + 1, total_epochs + 1))
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label='Train Loss')
+    if any(val_losses):
+        plt.plot(epochs, [v for v in val_losses if v is not None], label='Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training vs Validation Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_acc1s, label='Train Acc@1')
+    if any(val_acc1s):
+        plt.plot(epochs, [v for v in val_acc1s if v is not None], label='Val Acc@1')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy (%)')
+    plt.title('Training vs Validation Accuracy')
+    plt.legend()
+
+    plot_path = os.path.join(log_dir, "training_curves.png")
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    logger.info(f"Training metrics plot saved to {plot_path}")
+    plt.close()
+
 
 
 def main():
