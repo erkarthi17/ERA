@@ -11,7 +11,11 @@ from pathlib import Path
 import logging
 from datetime import datetime
 import sys
+import boto3 # Added boto3 import for S3 interaction
+from urllib.parse import urlparse # Added for parsing S3 URLs
 
+# Initialize S3 client once, outside functions, for efficiency
+s3_client = boto3.client('s3')
 
 def setup_logging(log_dir: str, name: str = "train") -> logging.Logger:
     """
@@ -169,47 +173,99 @@ def save_checkpoint(
     state: Dict,
     is_best: bool,
     checkpoint_dir: str,
-    filename: str = 'checkpoint.pth'
+    filename: str = 'checkpoint.pth',
+    s3_bucket: Optional[str] = None, # Added S3 bucket parameter
+    s3_prefix: Optional[str] = None   # Added S3 prefix parameter
 ):
     """
-    Save training checkpoint.
+    Save training checkpoint locally and optionally upload to S3.
     
     Args:
         state: Dictionary containing model state, optimizer state, etc.
         is_best: Whether this is the best model so far
-        checkpoint_dir: Directory to save checkpoints
+        checkpoint_dir: Directory to save checkpoints locally
         filename: Name of the checkpoint file
+        s3_bucket: S3 bucket to upload to (optional)
+        s3_prefix: S3 prefix (folder) within the bucket to upload to (optional)
     """
+    logger = logging.getLogger(state.get('config', {}).get('checkpoint_name', 'default')) # Get logger based on checkpoint name
     os.makedirs(checkpoint_dir, exist_ok=True)
     
-    # Save regular checkpoint
+    # Save regular checkpoint locally
     filepath = os.path.join(checkpoint_dir, filename)
     torch.save(state, filepath)
-    
-    # Save best model
+    logger.info(f"Saved local checkpoint to {filepath}")
+
+    # Upload regular checkpoint to S3
+    if s3_bucket and s3_prefix:
+        s3_object_key = os.path.join(s3_prefix, filename)
+        try:
+            s3_client.upload_file(filepath, s3_bucket, s3_object_key)
+            logger.info(f"Uploaded checkpoint to s3://{s3_bucket}/{s3_object_key}")
+        except Exception as e:
+            logger.error(f"Error uploading checkpoint {filename} to S3: {e}")
+
+    # Save and upload best model if applicable
     if is_best:
-        best_filepath = os.path.join(checkpoint_dir, 'best_model.pth')
+        best_filepath = os.path.join(checkpoint_dir, 'model_best.pth') # Changed from best_model.pth for consistency
         torch.save(state, best_filepath)
+        logger.info(f"Saved local best model to {best_filepath}")
+
+        if s3_bucket and s3_prefix:
+            s3_best_object_key = os.path.join(s3_prefix, 'model_best.pth')
+            try:
+                s3_client.upload_file(best_filepath, s3_bucket, s3_best_object_key)
+                logger.info(f"Uploaded best model to s3://{s3_bucket}/{s3_best_object_key}")
+            except Exception as e:
+                logger.error(f"Error uploading best model to S3: {e}")
 
 
-def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_scheduler=None):
+def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_scheduler=None, logger: Optional[logging.Logger] = None):
     """
-    Load training checkpoint.
+    Load training checkpoint from a local path or an S3 path.
+    Downloads from S3 to /tmp/ if an S3 path is provided.
     
     Args:
-        checkpoint_path: Path to checkpoint file
+        checkpoint_path: Path to checkpoint file (local or S3 URL)
         model: Model to load weights into
         optimizer: Optimizer to load state into (optional)
         lr_scheduler: Learning rate scheduler to load state into (optional)
+        logger: Logger instance for output (optional)
     
     Returns:
         Dictionary containing loaded state
     """
-    if not os.path.isfile(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    current_logger = logger if logger else logging.getLogger(__name__) # Use provided logger or create a default one
+    local_path_to_load = checkpoint_path
     
-    print(f"Loading checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+    # Check if checkpoint_path is an S3 URL
+    if checkpoint_path.startswith('s3://'):
+        s3_url_parsed = urlparse(checkpoint_path)
+        s3_bucket = s3_url_parsed.netloc
+        s3_object_key = s3_url_parsed.path.lstrip('/')
+        
+        # Download from S3 to a temporary local file
+        os.makedirs('/tmp', exist_ok=True) 
+        local_path_to_load = os.path.join('/tmp', os.path.basename(s3_object_key))
+        
+        current_logger.info(f"Attempting to download checkpoint from s3://{s3_bucket}/{s3_object_key} to {local_path_to_load}")
+        try:
+            s3_client.download_file(s3_bucket, s3_object_key, local_path_to_load)
+            current_logger.info("Download successful. Loading checkpoint...")
+        except s3_client.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                raise FileNotFoundError(f"Checkpoint not found on S3: {checkpoint_path}")
+            else:
+                raise RuntimeError(f"Error downloading checkpoint from S3: {e}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error downloading checkpoint: {e}")
+
+    # Load the checkpoint from the local path (either original or downloaded)
+    if not os.path.isfile(local_path_to_load):
+        raise FileNotFoundError(f"Checkpoint file not found: {local_path_to_load}")
+
+    current_logger.info(f"Loading checkpoint from {local_path_to_load}")
+    checkpoint = torch.load(local_path_to_load, map_location='cpu', weights_only=False)
     
     # Load model state
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -222,10 +278,49 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
     if lr_scheduler is not None and 'scheduler_state_dict' in checkpoint:
         lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     
-    print(f"Loaded checkpoint from epoch {checkpoint['epoch']}")
-    print(f"Best top-1 accuracy: {checkpoint.get('best_acc1', 0):.2f}%")
+    current_logger.info(f"Loaded checkpoint from epoch {checkpoint['epoch']} with best_acc1: {checkpoint.get('best_acc1', 0):.2f}%")
     
     return checkpoint
+
+
+def get_latest_s3_checkpoint(s3_bucket: str, s3_prefix: str, logger: Optional[logging.Logger] = None, checkpoint_filename_pattern: str = 'checkpoint_s3_epoch_*.pth') -> Optional[str]:
+    """
+    Finds the latest checkpoint in a given S3 bucket and prefix based on modification time.
+    Returns the full S3 path of the latest checkpoint, or None if no checkpoints are found.
+    """
+    current_logger = logger if logger else logging.getLogger(__name__) # Use provided logger or create a default one
+    current_logger.info(f"Searching for latest checkpoint in s3://{s3_bucket}/{s3_prefix}...")
+    try:
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=s3_bucket, Prefix=s3_prefix)
+
+        latest_checkpoint_key = None
+        latest_modified_time = None
+
+        for page in pages:
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    object_key = obj["Key"]
+                    # We are looking for checkpoint files created by save_checkpoint, not best models
+                    # The pattern ensures we pick checkpoint_s3_epoch_N.pth, not model_best.pth
+                    if object_key.startswith(s3_prefix) and object_key.endswith('.pth') and 'checkpoint_s3_epoch_' in object_key:
+                        modified_time = obj["LastModified"]
+                        
+                        if latest_modified_time is None or modified_time > latest_modified_time:
+                            latest_modified_time = modified_time
+                            latest_checkpoint_key = object_key
+        
+        if latest_checkpoint_key:
+            s3_path = f"s3://{s3_bucket}/{latest_checkpoint_key}"
+            current_logger.info(f"Found latest checkpoint: {s3_path} (Last Modified: {latest_modified_time})")
+            return s3_path
+        else:
+            current_logger.info(f"No checkpoint files found matching pattern '{checkpoint_filename_pattern}' in s3://{s3_bucket}/{s3_prefix}")
+            return None
+
+    except Exception as e:
+        current_logger.error(f"Error listing S3 checkpoints from s3://{s3_bucket}/{s3_prefix}: {e}")
+        return None
 
 
 def set_seed(seed: int):
@@ -355,4 +450,3 @@ if __name__ == "__main__":
         time.sleep(0.1)
     
     print("\nAll utility tests passed!")
-

@@ -38,6 +38,13 @@ class Config(BaseConfig):
     force_relist_s3: bool = field(default=False, metadata={"help": "Force re-listing S3 files, ignoring cache"})
     # --- End of S3 Caching Configuration ---
 
+    # --- S3 Checkpoint Configuration (New) ---
+    s3_checkpoint_bucket: str = "imagenet-dataset-karthick-kannan" # Or a dedicated bucket for checkpoints
+    s3_checkpoint_prefix: str = "resnet50_checkpoints/" # Prefix within the bucket where checkpoints will be stored
+    resume_from_s3_latest: bool = False # Flag to automatically find and resume from latest S3 checkpoint
+    # --- End of S3 Checkpoint Configuration ---
+
+
     def __post_init__(self):
         """Validate and set derived parameters."""
         # Ensure checkpoint and log directories exist relative to the current script's directory
@@ -55,6 +62,9 @@ class Config(BaseConfig):
         self.train_path = f"s3://{self.s3_bucket}/{self.s3_prefix_train}"
         self.val_path = f"s3://{self.s3_bucket}/{self.s3_prefix_val}"
         
+        # New: Create S3 paths for checkpoints
+        self.s3_checkpoint_path = f"s3://{self.s3_checkpoint_bucket}/{self.s3_checkpoint_prefix}"
+
         # The base config's path validation will warn, but we'll handle S3 paths in data_s3.py
         # You can remove these warnings if they are not relevant for S3 paths
         # if not os.path.exists(self.train_path):

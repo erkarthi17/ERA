@@ -24,7 +24,8 @@ from .utils import ( # Assuming utils.py is in parent directory
     set_seed,
     get_device,
     count_parameters,
-    Timer
+    Timer,
+    get_latest_s3_checkpoint # New: Import function to get latest S3 checkpoint
 )
 
 
@@ -396,9 +397,16 @@ def main():
     parser.add_argument('--s3-prefix-train', type=str, default=None, help='S3 prefix for training data')
     parser.add_argument('--s3-prefix-val', type=str, default=None, help='S3 prefix for validation data')
     
-    # S3 Caching arguments (new)
-    parser.add_argument('--cache-dir', type=str, default='./.s3_cache', help='Directory for S3 file list cache')
+    # S3 Caching arguments
+    parser.add_argument('--cache-dir', type=str, default=None, help='Directory for S3 file list cache')
     parser.add_argument('--force-relist-s3', action='store_true', help='Force re-listing S3 files, ignoring cache')
+
+    # S3 Checkpoint arguments (New)
+    parser.add_argument('--s3-checkpoint-bucket', type=str, default=None, help='S3 bucket for checkpoints')
+    parser.add_argument('--s3-checkpoint-prefix', type=str, default=None, help='S3 prefix for checkpoints')
+    parser.add_argument('--resume-from-s3-latest', action='store_true', 
+                        help='Automatically find and resume from the latest checkpoint in S3 checkpoint prefix')
+
 
     args = parser.parse_args()
     
@@ -428,9 +436,19 @@ def main():
     config.train_subset_size = args.train_subset
     config.val_subset_size = args.val_subset
 
-    # Apply S3 Caching config from command line (new)
-    config.cache_dir = args.cache_dir
-    config.force_relist_s3 = args.force_relist_s3
+    # Apply S3 Caching config from command line
+    if args.cache_dir: # Only override if provided via command line
+        config.cache_dir = args.cache_dir
+    if args.force_relist_s3:
+        config.force_relist_s3 = args.force_relist_s3
+    
+    # Apply S3 Checkpoint config from command line (New)
+    if args.s3_checkpoint_bucket:
+        config.s3_checkpoint_bucket = args.s3_checkpoint_bucket
+    if args.s3_checkpoint_prefix:
+        config.s3_checkpoint_prefix = args.s3_checkpoint_prefix
+    if args.resume_from_s3_latest:
+        config.resume_from_s3_latest = args.resume_from_s3_latest
     
     # Set device
     config.device = get_device(config)
@@ -448,6 +466,9 @@ def main():
     logger.info(f"Val subset size: {config.val_subset_size}")
     logger.info(f"S3 Cache Directory: {config.cache_dir}")
     logger.info(f"Force S3 Relist: {config.force_relist_s3}")
+    logger.info(f"S3 Checkpoint Bucket: {config.s3_checkpoint_bucket}")
+    logger.info(f"S3 Checkpoint Prefix: {config.s3_checkpoint_prefix}")
+    logger.info(f"Resume from S3 Latest: {config.resume_from_s3_latest}")
     
     # Create model
     logger.info(f"\nCreating ResNet-50 model...")
@@ -499,18 +520,32 @@ def main():
         logger.info("Learning Rate Finder complete. Check the plot for optimal LR.")
         return # Exit after LR finding
 
-    # Resume from checkpoint
+    # Resume from checkpoint logic (Updated for S3 latest)
     start_epoch = 0
     best_acc1 = 0.0
     best_train_acc1 = 0.0
+    
+    # Priority: 1. Specific --resume path, 2. --resume-from-s3-latest, 3. No resume
     if config.resume and config.resume_path:
-        logger.info(f"\nResuming from checkpoint: {config.resume_path}")
-        # Pass the already initialized scheduler
+        logger.info(f"\nResuming from specified checkpoint: {config.resume_path}")
         checkpoint = load_checkpoint(config.resume_path, model, optimizer, scheduler)
         start_epoch = checkpoint['epoch'] + 1
         best_acc1 = checkpoint.get('best_acc1', 0.0)
         best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
-    
+    elif config.resume_from_s3_latest:
+        logger.info(f"\nAttempting to resume from latest S3 checkpoint in {config.s3_checkpoint_path}...")
+        latest_s3_checkpoint_path = get_latest_s3_checkpoint(config.s3_checkpoint_bucket, config.s3_checkpoint_prefix)
+        if latest_s3_checkpoint_path:
+            config.resume_path = latest_s3_checkpoint_path # Set resume_path for load_checkpoint
+            checkpoint = load_checkpoint(config.resume_path, model, optimizer, scheduler)
+            start_epoch = checkpoint['epoch'] + 1
+            best_acc1 = checkpoint.get('best_acc1', 0.0)
+            best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
+        else:
+            logger.warning("No latest S3 checkpoint found. Starting training from scratch.")
+    else:
+        logger.info("\nStarting training from scratch (no resume path specified).")
+
     # The scheduler is already initialized and potentially updated by load_checkpoint
     # No need to re-initialize here.
 
@@ -579,7 +614,7 @@ def main():
                 f"Best Train Acc@1: {best_train_acc1:.2f}%"
             )
         
-        # Save checkpoint
+        # Save checkpoint (locally and to S3)
         if (epoch + 1) % config.save_every == 0 or is_best:
             checkpoint = {
                 'epoch': epoch,
@@ -588,15 +623,17 @@ def main():
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_acc1': best_acc1,
                 'best_train_acc1': best_train_acc1,
-                'config': config
+                'config': config # Save the entire config for reproducibility
             }
             save_checkpoint(
                 checkpoint,
                 is_best,
                 config.checkpoint_dir,
-                f'checkpoint_s3_epoch_{epoch}.pth'
+                f'checkpoint_s3_epoch_{epoch}.pth', # Unique filename for each epoch
+                s3_bucket=config.s3_checkpoint_bucket,
+                s3_prefix=config.s3_checkpoint_prefix
             )
-            logger.info(f"Saved checkpoint for epoch {epoch+1}")
+            logger.info(f"Saved checkpoint for epoch {epoch+1} (local and S3).")
     
     logger.info("\n" + "="*80)
     logger.info("Training completed!")
