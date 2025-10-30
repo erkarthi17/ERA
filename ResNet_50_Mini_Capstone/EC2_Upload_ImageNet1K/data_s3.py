@@ -7,8 +7,9 @@ import io
 import s3fs
 from tqdm import tqdm
 import multiprocessing
-import json # Added for JSON caching
-import time # Added for timing and optional timestamp in cache
+import json
+import time
+import sys # Added to specify tqdm output stream
 
 # Define ImageNet mean and std for normalization
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -19,13 +20,13 @@ class ImageNetS3Dataset(Dataset):
     A PyTorch Dataset for loading ImageNet data directly from S3.
     """
     def __init__(self, s3_bucket, s3_prefix, transform=None, subset_size=None, 
-                 s3_endpoint_url=None, cache_dir=None, force_relist_s3=False): # Added cache_dir, force_relist_s3
+                 s3_endpoint_url=None, cache_dir=None, force_relist_s3=False):
         self.s3_bucket = s3_bucket
         self.s3_prefix = s3_prefix
         self.transform = transform
         self.s3_endpoint_url = s3_endpoint_url
-        self.cache_dir = cache_dir # Store cache directory
-        self.force_relist_s3 = force_relist_s3 # Store force relist flag
+        self.cache_dir = cache_dir
+        self.force_relist_s3 = force_relist_s3
 
         if self.s3_endpoint_url:
             self.s3 = s3fs.S3FileSystem(client_kwargs={'endpoint_url': self.s3_endpoint_url})
@@ -48,16 +49,14 @@ class ImageNetS3Dataset(Dataset):
 
         # Try to load from cache first
         if self.cache_filepath and os.path.exists(self.cache_filepath) and not self.force_relist_s3:
-            print(f"Loading S3 file list from cache: {self.cache_filepath}...")
+            print(f"[{time.strftime('%H:%M:%S')}] Loading S3 file list from cache: {self.cache_filepath}...")
             try:
                 with open(self.cache_filepath, 'r') as f:
                     cached_data = json.load(f)
                 self.s3_image_paths = cached_data['s3_image_paths']
-                # Optionally, you might cache classes and class_to_idx too,
-                # but regenerating them from paths is safer if logic changes.
-                print(f"Successfully loaded {len(self.s3_image_paths)} paths from cache.")
+                print(f"[{time.strftime('%H:%M:%S')}] Successfully loaded {len(self.s3_image_paths)} paths from cache.")
             except Exception as e:
-                print(f"Error loading from cache: {e}. Re-listing from S3.")
+                print(f"[{time.strftime('%H:%M:%S')}] Error loading from cache: {e}. Re-listing from S3.")
                 self._list_s3_files() # Fallback to S3 listing
         else:
             # If no cache or forced relist, list from S3
@@ -77,46 +76,53 @@ class ImageNetS3Dataset(Dataset):
         if subset_size is not None and subset_size > 0:
             self.s3_image_paths = self.s3_image_paths[:subset_size]
             self.labels = self.labels[:subset_size]
-            print(f"Using a subset of {len(self.s3_image_paths)} images from s3://{s3_bucket}/{s3_prefix}")
+            print(f"[{time.strftime('%H:%M:%S')}] Using a subset of {len(self.s3_image_paths)} images from s3://{s3_bucket}/{s3_prefix}")
 
-        print(f"Found {len(self.s3_image_paths)} images in s3://{s3_bucket}/{s3_prefix}")
-        print(f"Number of classes: {len(self.classes)}")
+        print(f"[{time.strftime('%H:%M:%S')}] Found {len(self.s3_image_paths)} images in s3://{s3_bucket}/{s3_prefix}")
+        print(f"[{time.strftime('%H:%M:%S')}] Number of classes: {len(self.classes)}")
 
     def _list_s3_files(self):
         """Helper method to list files from S3 and optionally save to cache."""
-        print(f"Listing files directly from s3://{self.s3_bucket}/{self.s3_prefix}...")
+        print(f"[{time.strftime('%H:%M:%S')}] Listing files directly from s3://{self.s3_bucket}/{self.s3_prefix}...")
         try:
             start_time = time.time()
-            s3_paths = []
-            # More efficient way to glob for multiple extensions
-            # More robust way to glob for multiple case-insensitive extensions
-            # s3fs.glob with **/*.ext typically only returns file paths, so `s3.isfile` check is redundant and slow.
-            s3_paths.extend(self.s3.glob(f"{self.s3_bucket}/{self.s3_prefix}**/*.jpg"))
-            s3_paths.extend(self.s3.glob(f"{self.s3_bucket}/{self.s3_prefix}**/*.jpeg"))
-            s3_paths.extend(self.s3.glob(f"{self.s3_bucket}/{self.s3_prefix}**/*.JPG"))
-            s3_paths.extend(self.s3.glob(f"{self.s3_bucket}/{self.s3_prefix}**/*.JPEG"))
+            s3_paths_collector = []
+            
+            extensions = ["jpg", "jpeg", "JPG", "JPEG"]
+            
+            # Use tqdm to show progress through the extensions
+            with tqdm(extensions, desc="Globbing S3 by extension", dynamic_ncols=True, file=sys.stdout) as pbar:
+                for ext in pbar:
+                    current_glob_pattern = f"{self.s3_bucket}/{self.s3_prefix}**/*.{ext}"
+                    pbar.set_postfix_str(f"Globbing for .{ext}...")
+                    
+                    print(f"[{time.strftime('%H:%M:%S')}] Starting glob for: {current_glob_pattern}")
+                    
+                    found_paths_for_ext = self.s3.glob(current_glob_pattern)
+                    s3_paths_collector.extend([f"s3://{path}" for path in found_paths_for_ext])
+                    
+                    pbar.set_postfix_str(f"Found {len(found_paths_for_ext)} .{ext} files. Total: {len(s3_paths_collector)}")
+                    print(f"[{time.strftime('%H:%M:%S')}] Finished glob for .{ext}. Found {len(found_paths_for_ext)} files. Cumulative total: {len(s3_paths_collector)}")
 
-            if not s3_paths:
+            if not s3_paths_collector:
                 raise FileNotFoundError(f"No image files found in s3://{self.s3_bucket}/{self.s3_prefix}")
             
-            # The previous `if self.s3.isfile(...)` check is removed here
-            # as `s3fs.glob` with file extensions is generally sufficient.
-            self.s3_image_paths = sorted([f"s3://{path}" for path in s3_paths])
+            self.s3_image_paths = sorted(s3_paths_collector)
 
             if not self.s3_image_paths:
                 raise FileNotFoundError(f"No actual image files found after filtering in s3://{self.s3_bucket}/{self.s3_prefix}")
             
             end_time = time.time()
-            print(f"S3 listing completed in {end_time - start_time:.2f} seconds.")
+            print(f"[{time.strftime('%H:%M:%S')}] S3 listing completed in {end_time - start_time:.2f} seconds. Total unique images found: {len(self.s3_image_paths)}.")
 
             # Save to cache if cache_filepath is defined
             if self.cache_filepath:
                 with open(self.cache_filepath, 'w') as f:
                     json.dump({'s3_image_paths': self.s3_image_paths, 'timestamp': time.time()}, f)
-                print(f"Saved S3 file list to cache: {self.cache_filepath}")
+                print(f"[{time.strftime('%H:%M:%S')}] Saved S3 file list to cache: {self.cache_filepath}")
 
         except Exception as e:
-            print(f"Error listing S3 files: {e}")
+            print(f"[{time.strftime('%H:%M:%S')}] Error listing S3 files: {e}")
             raise
 
     def __len__(self):
@@ -137,10 +143,7 @@ class ImageNetS3Dataset(Dataset):
 
             return img, label
         except Exception as e:
-            print(f"Error loading image {s3_path}: {e}")
-            # Optionally return a dummy image and label, or re-raise if it's a critical error
-            # For robustness, you might want to skip this image and load the next,
-            # but for simplicity, we'll raise.
+            print(f"[{time.strftime('%H:%M:%S')}] Error loading image {s3_path}: {e}")
             raise
 
 
@@ -167,8 +170,8 @@ def get_data_loaders(config):
         s3_prefix=config.s3_prefix_train,
         transform=train_transform,
         subset_size=getattr(config, 'train_subset_size', None),
-        cache_dir=getattr(config, 'cache_dir', None), # Pass cache_dir
-        force_relist_s3=getattr(config, 'force_relist_s3', False) # Pass force_relist_s3
+        cache_dir=getattr(config, 'cache_dir', None),
+        force_relist_s3=getattr(config, 'force_relist_s3', False)
     )
 
     val_dataset = ImageNetS3Dataset(
@@ -176,23 +179,21 @@ def get_data_loaders(config):
         s3_prefix=config.s3_prefix_val,
         transform=val_transform,
         subset_size=getattr(config, 'val_subset_size', None),
-        cache_dir=getattr(config, 'cache_dir', None), # Pass cache_dir
-        force_relist_s3=getattr(config, 'force_relist_s3', False) # Pass force_relist_s3
+        cache_dir=getattr(config, 'cache_dir', None),
+        force_relist_s3=getattr(config, 'force_relist_s3', False)
     )
     
     # Determine the multiprocessing start method for DataLoaders
-    # This helps avoid 'fork-safe' issues with s3fs on some systems (e.g., Linux default 'fork')
-    # 'forkserver' or 'spawn' are safer alternatives.
     mp_context = None
-    if config.num_workers > 0: # Only set context if workers are actually used
+    if config.num_workers > 0:
         if 'forkserver' in multiprocessing.get_all_start_methods():
             mp_context = 'forkserver'
         elif 'spawn' in multiprocessing.get_all_start_methods():
             mp_context = 'spawn'
         else:
-            print("Warning: Neither 'forkserver' nor 'spawn' available. DataLoader might fail.")
+            print(f"[{time.strftime('%H:%M:%S')}] Warning: Neither 'forkserver' nor 'spawn' available. DataLoader might fail.")
     
-    print(f"Using multiprocessing context for DataLoader: {mp_context}")
+    print(f"[{time.strftime('%H:%M:%S')}] Using multiprocessing context for DataLoader: {mp_context}")
 
     train_loader = DataLoader(
         train_dataset,
@@ -200,7 +201,7 @@ def get_data_loaders(config):
         shuffle=True,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        multiprocessing_context=mp_context # Added multiprocessing_context
+        multiprocessing_context=mp_context
     )
 
     val_loader = DataLoader(
@@ -209,6 +210,6 @@ def get_data_loaders(config):
         shuffle=False,
         num_workers=config.num_workers,
         pin_memory=config.pin_memory,
-        multiprocessing_context=mp_context # Added multiprocessing_context
+        multiprocessing_context=mp_context
     )
     return train_loader, val_loader
