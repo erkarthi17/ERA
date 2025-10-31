@@ -35,6 +35,10 @@ class Config(BaseConfig):
     save_every_n_batches: Optional[int] = 500 # Set to an integer like 500 to enable batch-level saving
     # --- End of Checkpointing changes ---
 
+       # --- Dataset subset configuration (optional, used for debugging/sanity runs) ---
+    train_subset_size: Optional[int] = None  # e.g., 10000 for small-train debugging
+    val_subset_size: Optional[int] = None    # e.g., 1000 for small-val debugging
+
     # --- S3 Caching Configuration (New) ---
     cache_dir: str = field(default=".s3_cache", metadata={"help": "Directory for S3 file list cache"})
     force_relist_s3: bool = field(default=False, metadata={"help": "Force re-listing S3 files, ignoring cache"})
@@ -66,6 +70,13 @@ class Config(BaseConfig):
         
         # New: Create S3 paths for checkpoints
         self.s3_checkpoint_path = f"s3://{self.s3_checkpoint_bucket}/{self.s3_checkpoint_prefix}"
+
+                # Ensure optional attributes exist to avoid AttributeError in training script
+        if not hasattr(self, "train_subset_size"):
+            self.train_subset_size = None
+        if not hasattr(self, "val_subset_size"):
+            self.val_subset_size = None
+
 
         # The base config's path validation will warn, but we'll handle S3 paths in data_s3.py
         # You can remove these warnings if they are not relevant for S3 paths
