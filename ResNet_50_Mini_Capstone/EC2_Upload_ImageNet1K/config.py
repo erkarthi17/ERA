@@ -22,6 +22,10 @@ class Config(BaseConfig):
     # You might need to specify region if not configured globally on EC2
     s3_region: Optional[str] = None  # e.g., "us-east-1"
 
+       # Subsets for debug runs
+    train_subset_size: Optional[int] = None
+    val_subset_size: Optional[int] = None
+
     # Hugging Face dataset name (still used if you want to use HF's image processing, etc.)
     # But primary image loading will be from S3
     hf_dataset_name: str = "imagenet-1k"
@@ -35,10 +39,6 @@ class Config(BaseConfig):
     save_every_n_batches: Optional[int] = 500 # Set to an integer like 500 to enable batch-level saving
     # --- End of Checkpointing changes ---
 
-       # --- Dataset subset configuration (optional, used for debugging/sanity runs) ---
-    train_subset_size: Optional[int] = None  # e.g., 10000 for small-train debugging
-    val_subset_size: Optional[int] = None    # e.g., 1000 for small-val debugging
-
     # --- S3 Caching Configuration (New) ---
     cache_dir: str = field(default=".s3_cache", metadata={"help": "Directory for S3 file list cache"})
     force_relist_s3: bool = field(default=False, metadata={"help": "Force re-listing S3 files, ignoring cache"})
@@ -50,6 +50,13 @@ class Config(BaseConfig):
     resume_from_s3_latest: bool = False # Flag to automatically find and resume from latest S3 checkpoint
     # --- End of S3 Checkpoint Configuration ---
 
+       # 🔧 NEW: stall & dataloader recovery options
+    dataloader_timeout: int = 900        # 15 min timeout per worker
+    dataloader_retry_limit: int = 3      # retries if worker stalls
+    s3_max_retries: int = 5              # boto3 retry count
+    s3_request_timeout: int = 60         # seconds
+    s3_socket_timeout: int = 60
+
 
     def __post_init__(self):
         """Validate and set derived parameters."""
@@ -59,6 +66,9 @@ class Config(BaseConfig):
         self.checkpoint_dir = os.path.join(base_dir, "checkpoints")
         self.log_dir = os.path.join(base_dir, "logs")
         self.cache_dir = os.path.join(base_dir, self.cache_dir) # Make cache_dir relative to base_dir
+
+        for d in [self.checkpoint_dir, self.log_dir, self.cache_dir]:
+            os.makedirs(d, exist_ok=True)
 
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
@@ -85,17 +95,21 @@ class Config(BaseConfig):
         # if not os.path.exists(self.val_path):
         #     print(f"Warning: Validation data path does not exist: {self.val_path}")
 
-    def __str__(self):
-        """String representation of config."""
-        attrs = []
-        for key, value in self.__dict__.items():
-            # Exclude BaseConfig's redundant data_root if it's the default 'data'
-            # Or customize this further to show only relevant S3-specific fields
-            attrs.append(f"  {key}: {value}")
+    # def __str__(self):
+    #     """String representation of config."""
+    #     attrs = []
+    #     for key, value in self.__dict__.items():
+    #         # Exclude BaseConfig's redundant data_root if it's the default 'data'
+    #         # Or customize this further to show only relevant S3-specific fields
+    #         attrs.append(f"  {key}: {value}")
         
-        # Also include fields from BaseConfig if needed, but ensure no duplication
-        # This approach ensures all fields in *this* Config are included.
-        return "Config (S3):\\\n" + "\\\n".join(attrs)
+    #     # Also include fields from BaseConfig if needed, but ensure no duplication
+    #     # This approach ensures all fields in *this* Config are included.
+    #     return "Config (S3):\\\n" + "\\\n".join(attrs)
+
+    def __str__(self):
+        lines = [f"{k}: {v}" for k, v in self.__dict__.items()]
+        return "Config (S3 Training)\n" + "\n".join(lines)
 
 
 # Default configuration for S3
