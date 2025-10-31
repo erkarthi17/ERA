@@ -2,8 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-# Use torch.cuda.amp.autocast directly; GradScaler is imported from torch.cuda.amp
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler # Use torch.cuda.amp.autocast directly; GradScaler is imported from torch.cuda.amp
 import argparse
 import os
 import sys
@@ -12,7 +11,7 @@ from pathlib import Path
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import itertools # Added for efficient iteration skipping when resuming mid-epoch
-import pynvml # NEW: Import pynvml for GPU monitoring
+import nvidia_smi # NEW: Import nvidia_smi (replaces pynvml) for GPU monitoring
 
 
 # --- NEW: Helper for GPU monitoring ---
@@ -21,19 +20,19 @@ def get_gpu_utilization(device_id: int = 0) -> float:
     global _nvml_initialized
     if not _nvml_initialized:
         try:
-            pynvml.nvmlInit()
+            nvidia_smi.nvmlInit()
             _nvml_initialized = True
-        except pynvml.NVMLError as error:
+        except nvidia_smi.NVMLError as error:
             print(f"Warning: Failed to initialize NVML: {error}. GPU utilization will not be displayed.")
             _nvml_initialized = False # Ensure it's false if init fails
             return -1.0 # Return -1 to indicate error
     
     if _nvml_initialized:
         try:
-            handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
-            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            handle = nvidia_smi.nvmlDeviceGetHandleByIndex(device_id)
+            util = nvidia_smi.nvmlDeviceGetUtilizationRates(handle)
             return util.gpu # Returns GPU compute utilization in percent
-        except pynvml.NVMLError as error:
+        except nvidia_smi.NVMLError as error:
             # print(f"Warning: Failed to get GPU utilization: {error}") # Suppress frequent warnings
             return -1.0 # Return -1 to indicate error
     return -1.0
@@ -42,9 +41,9 @@ def shutdown_nvml():
     global _nvml_initialized
     if _nvml_initialized:
         try:
-            pynvml.nvmlShutdown()
+            nvidia_smi.nvmlShutdown()
             _nvml_initialized = False
-        except pynvml.NVMLError as error:
+        except nvidia_smi.NVMLError as error:
             print(f"Warning: Failed to shutdown NVML: {error}.")
 # --- END NEW HELPERS ---
 
@@ -201,8 +200,10 @@ def train_one_epoch(
         # Try-except for optimizer.param_groups[0]['lr'] to avoid crash if optimizer is None
         try:
             current_lr = optimizer.param_groups[0]['lr']
-        except AttributeError:
-            current_lr = 0.0 # Or some other default/indicator
+        except AttributeError: # If optimizer is None
+            current_lr = config.learning_rate # Fallback to initial LR from config
+            logger.warning("Optimizer not initialized. Falling back to config.learning_rate for logging.")
+
 
         pbar.set_postfix({
             'Loss': f'{losses.avg:.4f}',
@@ -367,8 +368,8 @@ def get_lr_scheduler(optimizer, config):
 
 def find_learning_rate(
     train_loader, model, criterion, optimizer, device,
-    start_lr, end_lr, num_batches, scaler, logger
-):
+    start_lr, end_lr, num_batches, scaler, logger, config
+): # Added config here for channels_last check
     """Perform a simple LR range test and save a plot."""
     model.train()
     lrs = []
@@ -389,7 +390,11 @@ def find_learning_rate(
     
     if use_amp and device_type == 'cuda':
         # Assume BF16 if available and not overridden by specific FP16 arg for LR finder
-        autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.bfloat16) 
+        # Use config's use_bf16 for consistency, or default to FP16
+        if getattr(config, "use_bf16", False) and torch.cuda.is_bf16_supported():
+            autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.bfloat16) 
+        else:
+            autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.float16)
     else:
         autocast_ctx = torch.nullcontext()
 
@@ -401,12 +406,8 @@ def find_learning_rate(
             iterator = iter(train_loader)
             images, target = next(iterator)
 
-        if device.type == 'cuda' and getattr(model, "memory_format", None) is None:
-            # ensure channels_last for inputs if model expects it (or if config suggests)
-            if getattr(config, "use_channels_last", False):
-                images = images.to(device, non_blocking=True).contiguous(memory_format=torch.channels_last)
-            else:
-                images = images.to(device, non_blocking=True)
+        if device.type == 'cuda' and getattr(config, "use_channels_last", True):
+            images = images.to(device, non_blocking=True).contiguous(memory_format=torch.channels_last)
         else:
             images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
@@ -458,7 +459,10 @@ def find_learning_rate(
 
 def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1s, val_acc1s, lrs, log_dir, logger, eval_interval):
     """Plot training and validation metrics to PNG files."""
-    epochs = list(range(start_epoch, total_epochs)) # Use range(start_epoch, total_epochs) to align with history lists
+    # Use range(start_epoch, total_epochs) to align with history lists,
+    # then adjust x-axis labels for 1-based display.
+    epochs_in_history = list(range(start_epoch, total_epochs)) 
+    
     # Convert lists to numbers or NaN for plotting consistency
     import numpy as np
     t_losses = [float(x) if x is not None else np.nan for x in train_losses]
@@ -471,9 +475,9 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
     
     # Plot Loss
     plt.subplot(1, 2, 1)
-    plt.plot([e + 1 for e in epochs], t_losses, label='Train Loss') # +1 for 1-based epoch display
+    plt.plot([e + 1 for e in epochs_in_history], t_losses, label='Train Loss') # +1 for 1-based epoch display
     # Filter out NaNs for plotting validation
-    valid_val_epochs = [e + 1 for e, val in zip(epochs, v_losses) if not np.isnan(val)]
+    valid_val_epochs = [e + 1 for e, val in zip(epochs_in_history, v_losses) if not np.isnan(val)]
     valid_v_losses = [val for val in v_losses if not np.isnan(val)]
     if valid_v_losses:
         plt.plot(valid_val_epochs, valid_v_losses, label='Val Loss')
@@ -485,7 +489,7 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
 
     # Plot Accuracy
     plt.subplot(1, 2, 2)
-    plt.plot([e + 1 for e in epochs], t_acc, label='Train Acc@1') # +1 for 1-based epoch display
+    plt.plot([e + 1 for e in epochs_in_history], t_acc, label='Train Acc@1') # +1 for 1-based epoch display
     valid_v_acc = [val for val in v_acc if not np.isnan(val)]
     if valid_v_acc:
         plt.plot(valid_val_epochs, valid_v_acc, label='Val Acc@1')
@@ -505,7 +509,7 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
     if lrs:
         plt.figure()
         # lrs list corresponds to total epochs from start_epoch, so adjust x-axis
-        plt.plot([e + 1 for e in epochs], lrs, label='LR') # +1 for 1-based epoch display
+        plt.plot([e + 1 for e in epochs_in_history], lrs, label='LR') # +1 for 1-based epoch display
         plt.xlabel('Epoch')
         plt.ylabel('LR')
         plt.title('Learning Rate over epochs')
@@ -693,7 +697,7 @@ def main():
         logger.info("Running LR finder...")
         find_learning_rate(
             train_loader, model, criterion, optimizer, config.device,
-            args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler, logger
+            args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler, logger, config
         )
         logger.info("LR Finder complete.")
         # --- NEW: Shutdown NVML if LR Finder exits early ---
@@ -873,6 +877,7 @@ def main():
     # --- NEW: Shutdown NVML at the end of main ---
     shutdown_nvml()
     # --- END NEW ---
+
 
 if __name__ == '__main__':
     main()
