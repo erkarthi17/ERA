@@ -2,7 +2,8 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import GradScaler
+# Use torch.cuda.amp.autocast directly; GradScaler is imported from torch.cuda.amp
+from torch.cuda.amp import autocast, GradScaler
 import argparse
 import os
 import sys
@@ -10,7 +11,42 @@ import time
 from pathlib import Path
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import itertools
+import itertools # Added for efficient iteration skipping when resuming mid-epoch
+import pynvml # NEW: Import pynvml for GPU monitoring
+
+
+# --- NEW: Helper for GPU monitoring ---
+_nvml_initialized = False
+def get_gpu_utilization(device_id: int = 0) -> float:
+    global _nvml_initialized
+    if not _nvml_initialized:
+        try:
+            pynvml.nvmlInit()
+            _nvml_initialized = True
+        except pynvml.NVMLError as error:
+            print(f"Warning: Failed to initialize NVML: {error}. GPU utilization will not be displayed.")
+            _nvml_initialized = False # Ensure it's false if init fails
+            return -1.0 # Return -1 to indicate error
+    
+    if _nvml_initialized:
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            return util.gpu # Returns GPU compute utilization in percent
+        except pynvml.NVMLError as error:
+            # print(f"Warning: Failed to get GPU utilization: {error}") # Suppress frequent warnings
+            return -1.0 # Return -1 to indicate error
+    return -1.0
+
+def shutdown_nvml():
+    global _nvml_initialized
+    if _nvml_initialized:
+        try:
+            pynvml.nvmlShutdown()
+            _nvml_initialized = False
+        except pynvml.NVMLError as error:
+            print(f"Warning: Failed to shutdown NVML: {error}.")
+# --- END NEW HELPERS ---
 
 # Local imports (assumes package layout)
 from .config import Config
@@ -31,6 +67,186 @@ from .utils import (
 )
 
 
+def train_one_epoch(
+    train_loader,
+    model,
+    criterion,
+    optimizer,
+    epoch,
+    config,
+    logger,
+    scaler=None,
+    scheduler=None, # Passed scheduler to train_one_epoch for OneCycleLR step
+    start_batch_idx=0, # New: Parameter to start training from a specific batch
+    current_best_acc1=0.0, # New: Pass current best_acc1 for mid-epoch checkpointing
+    current_best_train_acc1=0.0 # New: Pass current best_train_acc1 for mid-epoch checkpointing
+):
+    """
+    Train for one epoch.
+    
+    Args:
+        train_loader: Training data loader
+        model: Model to train
+        criterion: Loss function
+        optimizer: Optimizer
+        epoch: Current epoch number
+        config: Configuration object
+        logger: Logger instance
+        scaler: Gradient scaler for mixed precision
+        scheduler: Learning rate scheduler (needed for OneCycleLR per-step update)
+        start_batch_idx: Batch index to start from within the epoch (for resuming mid-epoch)
+        current_best_acc1: Current best validation accuracy (for saving checkpoints)
+        current_best_train_acc1: Current best training accuracy (for saving checkpoints)
+    
+    Returns:
+        Tuple of (average training loss, top1 accuracy, top5 accuracy)
+    """
+    batch_time = AverageMeter('Time', '6.3f')
+    data_time = AverageMeter('Data', '6.3f')  
+    losses = AverageMeter('Loss', '.4e')     
+    top1 = AverageMeter('Acc@1', '6.2f') 
+    top5 = AverageMeter('Acc@5', '6.2f')     
+    
+    # Switch to train mode
+    model.train()
+    
+    # If resuming mid-epoch, skip previously processed batches
+    if start_batch_idx > 0:
+        logger.info(f"Resuming epoch {epoch+1} from batch {start_batch_idx+1}/{len(train_loader)}...")
+        # Use itertools.islice to skip previously processed batches
+        train_loader_iter = itertools.islice(train_loader, start_batch_idx, None)
+    else:
+        train_loader_iter = train_loader
+    
+    # Create tqdm progress bar
+    pbar = tqdm(
+        enumerate(train_loader_iter, start=start_batch_idx), # Start enumerate from start_batch_idx
+        total=len(train_loader),
+        initial=start_batch_idx,
+        desc=f"Epoch {epoch+1}/{config.epochs}", 
+        leave=False, dynamic_ncols=True
+    )
+    
+    end = time.time()
+    
+    # Choose autocast context (for mixed precision)
+    use_amp = getattr(config, "mixed_precision", False)
+    use_bf16 = getattr(config, "use_bf16", False)
+    device_type = 'cuda' if config.device.type == 'cuda' else 'cpu'
+
+    if use_amp and device_type == 'cuda':
+        if use_bf16:
+            autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.bfloat16)
+        else:
+            autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.float16) # Default to FP16 if not BF16
+    else:
+        autocast_ctx = torch.nullcontext()
+
+    grad_accum_steps = getattr(config, "grad_accum_steps", 1)
+
+    # Loop over batches, starting from start_batch_idx
+    for i, (images, target) in pbar:
+        current_data_time = time.time() - end
+        data_time.update(current_data_time)
+        
+        # Move data to device and convert memory format for channels_last if requested
+        if config.device.type == 'cuda' and getattr(config, "use_channels_last", True):
+            images = images.to(config.device, non_blocking=True).contiguous(memory_format=torch.channels_last)
+        else:
+            images = images.to(config.device, non_blocking=True)
+        target = target.to(config.device, non_blocking=True)
+        
+        with autocast_ctx:
+            output = model(images)
+            loss = criterion(output, target) / grad_accum_steps # Scale loss for gradient accumulation
+        
+        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        
+        # Scale losses back for logging
+        losses.update(loss.item() * grad_accum_steps, images.size(0))
+        top1.update(acc1[0], images.size(0))
+        top5.update(acc5[0], images.size(0))
+        
+        # Backward pass (with optional gradient accumulation)
+        # Only zero gradients at the start of an accumulation step if accumulating
+        if (i % grad_accum_steps) == 0:
+            optimizer.zero_grad() # Only zero if starting a new accumulation cycle
+
+        if scaler is not None:
+            scaler.scale(loss).backward()
+        else:
+            loss.backward()
+
+        if (i + 1) % grad_accum_steps == 0:
+            if scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+
+            # Optionally update scheduler per step if it's OneCycleLR
+            if scheduler is not None and getattr(config, "lr_scheduler", "").lower() == "onecycle":
+                scheduler.step()
+        
+        # Measure elapsed time for the entire batch
+        current_batch_time = time.time() - end
+        batch_time.update(current_batch_time)
+        end = time.time()
+        
+        # NEW: Get GPU Utilization
+        gpu_util = get_gpu_utilization(config.device.index if config.device.type == 'cuda' else 0)
+        gpu_util_str = f'{gpu_util:.0f}%' if gpu_util >= 0 else 'N/A'
+
+        # Update progress bar with current metrics and new performance indicators
+        # Try-except for optimizer.param_groups[0]['lr'] to avoid crash if optimizer is None
+        try:
+            current_lr = optimizer.param_groups[0]['lr']
+        except AttributeError:
+            current_lr = 0.0 # Or some other default/indicator
+
+        pbar.set_postfix({
+            'Loss': f'{losses.avg:.4f}',
+            'Acc@1': f'{top1.avg:.2f}%',
+            'Acc@5': f'{top5.avg:.2f}%',
+            'LR': f'{current_lr:.6f}',
+            'DataT': f'{data_time.val:.3f}s', # New: Data loading time for current batch
+            'BatchT': f'{batch_time.val:.3f}s', # New: Total batch processing time for current batch
+            'GPU%': gpu_util_str # New: GPU Utilization
+        })
+        
+        # Log detailed progress at intervals
+        if (i + 1) % getattr(config, "log_interval", 100) == 0: # Use config.log_interval, default 100
+            logger.info(
+                f"Epoch [{epoch+1}] Batch [{i+1}/{len(train_loader)}] " # i+1 for 1-based indexing
+                f"Loss: {losses.avg:.4f} Acc@1: {top1.avg:.2f}% Acc@5: {top5.avg:.2f}% "
+                f"DataT: {data_time.val:.3f}s BatchT: {batch_time.val:.3f}s GPU%: {gpu_util_str}"
+            )
+        
+        # New: Save mid-epoch checkpoint every N batches if configured
+        if config.save_every_n_batches is not None and config.save_every_n_batches > 0 and (i + 1) % config.save_every_n_batches == 0:
+            checkpoint = {
+                'epoch': epoch,
+                'batch_idx': i, # Save the completed batch index (0-based)
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
+                'best_acc1': current_best_acc1, # Use the best_acc1 from main loop
+                'best_train_acc1': current_best_train_acc1, # Use the best_train_acc1 from main loop
+                'config': config
+            }
+            save_checkpoint(
+                checkpoint,
+                is_best=False, # Mid-epoch saves are generally not marked as 'best'
+                checkpoint_dir=config.checkpoint_dir,
+                filename=f'checkpoint_s3_epoch_{epoch}_batch_{i+1}.pth', # Unique filename (1-based batch number)
+                s3_bucket=config.s3_checkpoint_bucket,
+                s3_prefix=config.s3_checkpoint_prefix
+            )
+            logger.info(f"Saved mid-epoch checkpoint for epoch {epoch+1}, batch {i+1} (local and S3).")
+
+    return losses.avg, top1.avg, top5.avg
+
+
 def validate(val_loader, model, criterion, config, logger):
     """Run evaluation on validation set."""
     batch_time = AverageMeter('Time', '6.3f')
@@ -45,11 +261,13 @@ def validate(val_loader, model, criterion, config, logger):
     use_bf16 = getattr(config, "use_bf16", False)
     device_type = 'cuda' if config.device.type == 'cuda' else 'cpu'
 
-    amp_ctx = (
-        torch.amp.autocast(device_type=device_type, dtype=torch.bfloat16)
-        if (use_amp and use_bf16 and device_type == 'cuda') else
-        torch.amp.autocast(device_type=device_type)
-    ) if use_amp else torch.nullcontext()
+    if use_amp and device_type == 'cuda':
+        if use_bf16:
+            amp_ctx = torch.autocast(device_type='cuda', dtype=torch.bfloat16)
+        else:
+            amp_ctx = torch.autocast(device_type='cuda', dtype=torch.float16)
+    else:
+        amp_ctx = torch.nullcontext()
 
     with torch.no_grad():
         for i, (images, target) in enumerate(tqdm(val_loader, desc="Validating", leave=False, dynamic_ncols=True)):
@@ -157,6 +375,8 @@ def find_learning_rate(
     losses = []
     best_loss = float('inf')
 
+    logger.info(f"Starting LR Finder: from {start_lr:.7f} to {end_lr:.7f} over {num_batches} batches.")
+
     # We will use a multiplicative schedule to ramp LR from start_lr --> end_lr
     # Reset optimizer param groups
     for pg in optimizer.param_groups:
@@ -166,10 +386,15 @@ def find_learning_rate(
     use_amp = scaler is not None
     # choose autocast dtype only if on CUDA
     device_type = 'cuda' if device.type == 'cuda' else 'cpu'
-    amp_ctx = torch.amp.autocast(device_type=device_type) if use_amp else torch.nullcontext()
+    
+    if use_amp and device_type == 'cuda':
+        # Assume BF16 if available and not overridden by specific FP16 arg for LR finder
+        autocast_ctx = torch.autocast(device_type='cuda', dtype=torch.bfloat16) 
+    else:
+        autocast_ctx = torch.nullcontext()
 
     iterator = iter(train_loader)
-    for batch_idx in tqdm(range(num_batches), desc="LR Finder", leave=True):
+    for batch_idx in tqdm(range(num_batches), desc="LR Finder", leave=True, dynamic_ncols=True, file=sys.stdout):
         try:
             images, target = next(iterator)
         except StopIteration:
@@ -177,14 +402,17 @@ def find_learning_rate(
             images, target = next(iterator)
 
         if device.type == 'cuda' and getattr(model, "memory_format", None) is None:
-            # ensure channels_last for inputs if model expects it
-            images = images.to(device, non_blocking=True).contiguous(memory_format=torch.channels_last)
+            # ensure channels_last for inputs if model expects it (or if config suggests)
+            if getattr(config, "use_channels_last", False):
+                images = images.to(device, non_blocking=True).contiguous(memory_format=torch.channels_last)
+            else:
+                images = images.to(device, non_blocking=True)
         else:
             images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
         optimizer.zero_grad()
-        with amp_ctx:
+        with autocast_ctx:
             outputs = model(images)
             loss = criterion(outputs, target)
 
@@ -230,7 +458,7 @@ def find_learning_rate(
 
 def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1s, val_acc1s, lrs, log_dir, logger, eval_interval):
     """Plot training and validation metrics to PNG files."""
-    epochs = list(range(start_epoch + 1, total_epochs + 1))
+    epochs = list(range(start_epoch, total_epochs)) # Use range(start_epoch, total_epochs) to align with history lists
     # Convert lists to numbers or NaN for plotting consistency
     import numpy as np
     t_losses = [float(x) if x is not None else np.nan for x in train_losses]
@@ -240,23 +468,32 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
 
     os.makedirs(log_dir, exist_ok=True)
     plt.figure(figsize=(12, 5))
+    
+    # Plot Loss
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, t_losses, label='Train Loss')
-    if not all(np.isnan(v_losses)):
-        plt.plot(epochs, v_losses, label='Val Loss')
+    plt.plot([e + 1 for e in epochs], t_losses, label='Train Loss') # +1 for 1-based epoch display
+    # Filter out NaNs for plotting validation
+    valid_val_epochs = [e + 1 for e, val in zip(epochs, v_losses) if not np.isnan(val)]
+    valid_v_losses = [val for val in v_losses if not np.isnan(val)]
+    if valid_v_losses:
+        plt.plot(valid_val_epochs, valid_v_losses, label='Val Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Loss')
     plt.legend()
+    plt.grid(True)
 
+    # Plot Accuracy
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, t_acc, label='Train Acc@1')
-    if not all(np.isnan(v_acc)):
-        plt.plot(epochs, v_acc, label='Val Acc@1')
+    plt.plot([e + 1 for e in epochs], t_acc, label='Train Acc@1') # +1 for 1-based epoch display
+    valid_v_acc = [val for val in v_acc if not np.isnan(val)]
+    if valid_v_acc:
+        plt.plot(valid_val_epochs, valid_v_acc, label='Val Acc@1')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
     plt.title('Accuracy')
     plt.legend()
+    plt.grid(True)
 
     plot_path = os.path.join(log_dir, "training_curves.png")
     plt.tight_layout()
@@ -267,8 +504,9 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
     # LR plot
     if lrs:
         plt.figure()
-        plt.plot(range(len(lrs)), lrs, label='LR')
-        plt.xlabel('Epoch (snapshot)')
+        # lrs list corresponds to total epochs from start_epoch, so adjust x-axis
+        plt.plot([e + 1 for e in epochs], lrs, label='LR') # +1 for 1-based epoch display
+        plt.xlabel('Epoch')
         plt.ylabel('LR')
         plt.title('Learning Rate over epochs')
         plt.grid(True)
@@ -276,152 +514,6 @@ def plot_metrics(start_epoch, total_epochs, train_losses, val_losses, train_acc1
         plt.savefig(lr_plot_path)
         logger.info(f"LR plot saved to {lr_plot_path}")
         plt.close()
-
-
-def train_one_epoch(
-    train_loader,
-    model,
-    criterion,
-    optimizer,
-    epoch,
-    config,
-    logger,
-    scaler=None,
-    scheduler=None,
-    start_batch_idx=0,
-    current_best_acc1=0.0,
-    current_best_train_acc1=0.0
-):
-    """
-    Train for one epoch with optional mid-epoch checkpointing and gradient accumulation.
-    """
-    batch_time = AverageMeter('Time', '6.3f')
-    data_time = AverageMeter('Data', '6.3f')
-    losses = AverageMeter('Loss', '.4e')
-    top1 = AverageMeter('Acc@1', '6.2f')
-    top5 = AverageMeter('Acc@5', '6.2f')
-
-    model.train()
-
-    # If resuming mid-epoch, skip previously processed batches
-    if start_batch_idx > 0:
-        logger.info(f"Resuming epoch {epoch+1} from batch {start_batch_idx+1}/{len(train_loader)}...")
-        train_loader_iter = itertools.islice(train_loader, start_batch_idx, None)
-    else:
-        train_loader_iter = train_loader
-
-    pbar = tqdm(
-        enumerate(train_loader_iter, start=start_batch_idx),
-        total=len(train_loader),
-        initial=start_batch_idx,
-        desc=f"Epoch {epoch+1}/{config.epochs}",
-        leave=False, dynamic_ncols=True
-    )
-
-    # Choose autocast context
-    use_amp = getattr(config, "mixed_precision", False)
-    use_bf16 = getattr(config, "use_bf16", False)
-    device_type = 'cuda' if config.device.type == 'cuda' else 'cpu'
-    if use_amp and device_type == 'cuda' and use_bf16:
-        autocast_ctx = torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
-    elif use_amp and device_type == 'cuda':
-        autocast_ctx = torch.amp.autocast(device_type='cuda')
-    else:
-        autocast_ctx = torch.nullcontext()
-
-    grad_accum_steps = getattr(config, "grad_accum_steps", 1)
-    end = time.time()
-
-    for i, (images, target) in pbar:
-        data_time.update(time.time() - end)
-
-        # Move data to device and convert memory format for channels_last if requested
-        if config.device.type == 'cuda' and getattr(config, "use_channels_last", True):
-            images = images.to(config.device, non_blocking=True).contiguous(memory_format=torch.channels_last)
-        else:
-            images = images.to(config.device, non_blocking=True)
-        target = target.to(config.device, non_blocking=True)
-
-        with autocast_ctx:
-            output = model(images)
-            loss = criterion(output, target) / grad_accum_steps
-
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-        losses.update(loss.item() * grad_accum_steps, images.size(0))
-        top1.update(acc1[0], images.size(0))
-        top5.update(acc5[0], images.size(0))
-
-        # Backprop / optimizer step (with optional grad accumulation)
-        optimizer.zero_grad() if grad_accum_steps == 1 else None
-
-        if scaler is not None:
-            scaler.scale(loss).backward()
-        else:
-            loss.backward()
-
-        if (i + 1) % grad_accum_steps == 0:
-            if scaler is not None:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
-
-            # Optionally update scheduler per step if it's OneCycleLR
-            if scheduler is not None and getattr(config, "lr_scheduler", "").lower() == "onecycle":
-                scheduler.step()
-
-            # zeroing gradients for next accumulation if any
-            if grad_accum_steps > 1:
-                optimizer.zero_grad()
-
-        # Measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        # Update tqdm postfix
-        try:
-            current_lr = optimizer.param_groups[0]["lr"]
-        except Exception:
-            current_lr = 0.0
-        pbar.set_postfix({
-            'Loss': f'{losses.avg:.4f}',
-            'Acc@1': f'{top1.avg:.2f}%',
-            'Acc@5': f'{top5.avg:.2f}%',
-            'LR': f'{current_lr:.6f}'
-        })
-
-        # Periodic logging
-        if i % getattr(config, "log_interval", 100) == 0:
-            logger.info(
-                f"Epoch [{epoch+1}] Batch [{i+1}/{len(train_loader)}] "
-                f"Loss: {losses.avg:.4f} Acc@1: {top1.avg:.2f}% Acc@5: {top5.avg:.2f}%"
-            )
-
-        # Mid-epoch checkpointing
-        if getattr(config, "save_every_n_batches", None) and (i + 1) % config.save_every_n_batches == 0:
-            checkpoint = {
-                'epoch': epoch,
-                'batch_idx': i,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
-                'best_acc1': current_best_acc1,
-                'best_train_acc1': current_best_train_acc1,
-                'config': config
-            }
-            filename = f'checkpoint_s3_epoch_{epoch}_batch_{i+1}.pth'
-            save_checkpoint(
-                checkpoint,
-                is_best=False,
-                checkpoint_dir=config.checkpoint_dir,
-                filename=filename,
-                s3_bucket=config.s3_checkpoint_bucket,
-                s3_prefix=config.s3_checkpoint_prefix
-            )
-            logger.info(f"Saved mid-epoch checkpoint for epoch {epoch+1}, batch {i+1} (local and S3).")
-
-    return losses.avg, top1.avg, top5.avg
 
 
 def main():
@@ -438,11 +530,13 @@ def main():
     parser.add_argument('--lr-finder-start-lr', type=float, default=1e-7, help='Start LR for LR finder')
     parser.add_argument('--lr-finder-end-lr', type=float, default=1.0, help='End LR for LR finder')
     parser.add_argument('--lr-finder-num-batches', type=int, default=100, help='Number of batches for LR finder')
-    parser.add_argument('--use-fp16', action='store_true', help='Use FP16 instead of BF16 (default BF16 on A10G)')
-    parser.add_argument('--save-every-n-batches', type=int, default=None, help='Save checkpoint every N batches within an epoch.')
+    parser.add_argument('--use-fp16', action='store_true', help='Use FP16 instead of BF16 (default BF16 on A10G if available)')
+    parser.add_argument('--save-every-n-batches', type=int, default=None, help='Save checkpoint every N batches within an epoch. Set to 0 or None to disable.')
+    parser.add_argument('--log-interval', type=int, default=100, help='Log progress every N batches.')
 
-    # S3 args (kept for compatibility)
-    parser.add_argument('--s3-bucket', type=str, default=None, help='S3 bucket name')
+
+    # S3 args
+    parser.add_argument('--s3-bucket', type=str, default=None, help='S3 bucket name for data')
     parser.add_argument('--s3-prefix-train', type=str, default=None, help='S3 prefix for training data')
     parser.add_argument('--s3-prefix-val', type=str, default=None, help='S3 prefix for validation data')
     parser.add_argument('--cache-dir', type=str, default=None, help='Directory for S3 file list cache')
@@ -456,18 +550,24 @@ def main():
     # Load config
     config = Config()
 
-    # Override config with CLI
+    # Override config with CLI arguments
     if args.batch_size:
         config.batch_size = args.batch_size
     if args.epochs:
         config.epochs = args.epochs
     if args.lr:
         config.learning_rate = args.lr
+    if args.train_subset:
+        config.train_subset_size = args.train_subset
+    if args.val_subset:
+        config.val_subset_size = args.val_subset
     if args.resume:
         config.resume = True
         config.resume_path = args.resume
     if args.save_every_n_batches is not None:
         config.save_every_n_batches = args.save_every_n_batches
+    if args.log_interval:
+        config.log_interval = args.log_interval
 
     # S3 overrides
     if args.s3_bucket:
@@ -488,14 +588,26 @@ def main():
         config.resume_from_s3_latest = True
 
     # Precision selection: default to BF16 if on CUDA and not overridden
+    config.mixed_precision = True # Assume mixed precision is desired
     config.use_bf16 = False
     if get_device(config).type == 'cuda':
-        # If user requested FP16 explicitly set that, else try BF16 by default for A10G
-        config.use_bf16 = not args.use_fp16
+        # Check if BF16 is natively supported by the GPU (Ampere+)
+        if torch.cuda.is_bf16_supported():
+            config.use_bf16 = True
+            if args.use_fp16: # If FP16 explicitly requested, override BF16
+                config.use_bf16 = False
+        elif args.use_fp16: # If BF16 not supported, but FP16 requested
+            config.use_bf16 = False
+        else: # No BF16 support and no FP16 requested, default to FP16
+            config.use_bf16 = False # Forces FP16 on older GPUs
+    else: # If not CUDA, disable mixed precision
+        config.mixed_precision = False
+
 
     # Performance defaults (can be overridden in config file)
     config.pin_memory = getattr(config, "pin_memory", True)
-    config.num_workers = getattr(config, "num_workers", max(4, (os.cpu_count() or 4) // 2))
+    # Adjust num_workers for optimal S3/CPU load vs GPU
+    config.num_workers = getattr(config, "num_workers", max(4, (os.cpu_count() or 4) // 2)) 
     config.prefetch_factor = getattr(config, "prefetch_factor", 2)
     config.persistent_workers = getattr(config, "persistent_workers", True)
     config.use_channels_last = getattr(config, "use_channels_last", True)
@@ -508,17 +620,30 @@ def main():
     set_seed(getattr(config, "seed", 42))
 
     # cudnn benchmark
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True # Improves performance by auto-tuning algorithms
 
     # Logging
     logger = setup_logging(config.log_dir, f"{config.checkpoint_name}_s3")
     logger.info("="*80)
     logger.info("Starting ResNet-50 ImageNet Training with S3 (optimized)")
     logger.info("="*80)
-    logger.info(f"\n{config}")
+    logger.info(f"\n{config}") # Print full config
+    logger.info(f"Train subset size: {config.train_subset_size}")
+    logger.info(f"Val subset size: {config.val_subset_size}")
     logger.info(f"S3 Cache Directory: {config.cache_dir}")
+    logger.info(f"Force S3 Relist: {config.force_relist_s3}")
     logger.info(f"S3 Checkpoint Bucket: {config.s3_checkpoint_bucket}")
     logger.info(f"S3 Checkpoint Prefix: {config.s3_checkpoint_prefix}")
+    logger.info(f"Resume from S3 Latest: {config.resume_from_s3_latest}")
+    logger.info(f"Save Every N Batches: {config.save_every_n_batches}")
+    logger.info(f"Log Interval: {config.log_interval}")
+    logger.info(f"Mixed Precision: {config.mixed_precision} (BF16: {config.use_bf16})")
+
+
+    # --- NEW: Initialize NVML at the start of main ---
+    if config.device.type == 'cuda':
+        get_gpu_utilization() # Call once to initialize NVML
+    # --- END NEW ---
 
     # Build model
     logger.info("Creating ResNet-50 model...")
@@ -539,10 +664,9 @@ def main():
 
     # Data loaders
     logger.info("Loading data from S3...")
-    # Ensure steps_per_epoch for some schedulers
     train_loader, val_loader = get_data_loaders(config)
-    # If OneCycleLR used, set steps_per_epoch
-    config.steps_per_epoch = len(train_loader)
+    # If OneCycleLR used, set steps_per_epoch for scheduler init
+    config.steps_per_epoch = len(train_loader) 
     logger.info(f"Train samples: {len(train_loader.dataset)}")
     logger.info(f"Val samples: {len(val_loader.dataset)}")
 
@@ -559,8 +683,9 @@ def main():
     logger.info(f"Using scheduler: {config.lr_scheduler}")
 
     # Mixed precision scaler
-    scaler = GradScaler() if getattr(config, "mixed_precision", False) else None
-    if scaler is not None:
+    # Updated GradScaler call for FutureWarning
+    scaler = GradScaler() if config.mixed_precision else None
+    if config.mixed_precision:
         logger.info(f"Using mixed precision (BF16={config.use_bf16})")
 
     # LR finder
@@ -571,7 +696,10 @@ def main():
             args.lr_finder_start_lr, args.lr_finder_end_lr, args.lr_finder_num_batches, scaler, logger
         )
         logger.info("LR Finder complete.")
-        return
+        # --- NEW: Shutdown NVML if LR Finder exits early ---
+        shutdown_nvml()
+        # --- END NEW ---
+        return # Exit after LR finding
 
     # Resume logic (explicit resume path > s3 latest)
     start_epoch = 0
@@ -598,10 +726,13 @@ def main():
             start_batch_idx = checkpoint.get('batch_idx', 0) + 1
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
+            
+            # If start_batch_idx is >= total batches, it means the epoch was completed
+            # and we should start the next epoch.
             if start_batch_idx >= len(train_loader):
                 start_epoch += 1
                 start_batch_idx = 0
-                logger.info(f"Resuming from end of epoch; continuing at epoch {start_epoch+1}")
+                logger.info(f"Resuming from end of epoch {start_epoch}. Continuing at epoch {start_epoch+1}")
             else:
                 logger.info(f"Resuming training from epoch {start_epoch+1}, batch {start_batch_idx+1}.")
         except Exception as e:
@@ -617,13 +748,24 @@ def main():
     history_val_acc1s = []
     history_lrs = []
 
+    # If resuming, populate history for previous epochs for correct plotting
+    # Assuming checkpoint contains history, or you fetch it
+    # For now, we'll start history from current start_epoch
+    
     for epoch in range(start_epoch, config.epochs):
         logger.info(f"\nEpoch {epoch+1}/{config.epochs}")
-        current_lr = optimizer.param_groups[0]['lr']
+        
+        # Get current LR for logging and plotting. Check if optimizer is valid.
+        try:
+            current_lr = optimizer.param_groups[0]['lr']
+        except AttributeError: # If optimizer is None
+            current_lr = config.learning_rate # Fallback to initial LR from config
+            logger.warning("Optimizer not initialized. Falling back to config.learning_rate for logging.")
+
         logger.info(f"Learning rate: {current_lr:.6f}")
         history_lrs.append(current_lr)
 
-        # Reset batch index for epochs after resume epoch
+        # Reset batch index for epochs after the initial resume epoch
         if epoch > start_epoch:
             start_batch_idx = 0
 
@@ -631,7 +773,7 @@ def main():
             train_loss, train_acc1, train_acc5 = train_one_epoch(
                 train_loader, model, criterion, optimizer,
                 epoch, config, logger, scaler,
-                scheduler=scheduler,
+                scheduler=scheduler, # Pass scheduler to train_one_epoch
                 start_batch_idx=start_batch_idx,
                 current_best_acc1=best_acc1,
                 current_best_train_acc1=best_train_acc1
@@ -640,7 +782,7 @@ def main():
         history_train_losses.append(train_loss)
         history_train_acc1s.append(train_acc1)
 
-        # Step scheduler if it's not OneCycleLR (OneCycle stepped per batch)
+        # Step scheduler if it's not OneCycleLR (OneCycle stepped per batch in train_one_epoch)
         if getattr(config, "lr_scheduler", "").lower() != "onecycle":
             scheduler.step()
 
@@ -677,15 +819,15 @@ def main():
         if (epoch + 1) % getattr(config, "save_every", 1) == 0:
             checkpoint = {
                 'epoch': epoch,
-                'batch_idx': len(train_loader) - 1,
+                'batch_idx': len(train_loader) - 1, # Mark as last batch of epoch (0-based index)
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
                 'best_acc1': best_acc1,
                 'best_train_acc1': best_train_acc1,
-                'config': config
+                'config': config # Save the entire config for reproducibility
             }
-            fname = f'checkpoint_s3_epoch_{epoch}.pth'
+            fname = f'checkpoint_s3_epoch_{epoch}.pth' # Using epoch number directly
             save_checkpoint(
                 checkpoint,
                 is_best,
@@ -699,12 +841,13 @@ def main():
         # Log GPU memory usage (if CUDA)
         if config.device.type == 'cuda':
             try:
-                tot_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                max_alloc = torch.cuda.max_memory_allocated() / (1024**3)
-                torch.cuda.reset_peak_memory_stats()
+                tot_mem = torch.cuda.get_device_properties(config.device.index).total_memory / (1024**3)
+                max_alloc = torch.cuda.max_memory_allocated(config.device.index) / (1024**3)
+                torch.cuda.reset_peak_memory_stats(config.device.index)
                 logger.info(f"GPU memory: total {tot_mem:.2f} GB, peak allocated {max_alloc:.2f} GB")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to log GPU memory stats: {e}")
+
 
     logger.info("\n" + "="*80)
     logger.info("Training completed!")
@@ -714,7 +857,7 @@ def main():
 
     logger.info("Generating training history plots...")
     plot_metrics(
-        start_epoch,
+        start_epoch, # Pass the actual starting epoch for plotting
         config.epochs,
         history_train_losses,
         history_val_losses,
@@ -727,6 +870,9 @@ def main():
     )
     logger.info("Training history plots generated and saved.")
 
+    # --- NEW: Shutdown NVML at the end of main ---
+    shutdown_nvml()
+    # --- END NEW ---
 
 if __name__ == '__main__':
     main()
