@@ -35,7 +35,7 @@ except Exception:
 # Local imports (assumes package layout)
 from .config import Config
 from .model import resnet50
-from .data_s3 import get_data_loaders
+from .data_loader import get_data_loaders
 from .utils import (
     setup_logging,
     AverageMeter,
