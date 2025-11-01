@@ -57,6 +57,9 @@ class Config(BaseConfig):
         for d in [self.checkpoint_dir, self.log_dir, self.cache_dir]:
             os.makedirs(d, exist_ok=True)
 
+        self.build_paths()
+
+    def _build_paths(self):
         # Construct paths dynamically based on source
         if self.data_source.lower() == "s3":
             self.train_path = f"s3://{self.s3_bucket}/{self.s3_prefix_train}"
@@ -67,7 +70,7 @@ class Config(BaseConfig):
         else:
             raise ValueError(f"Unsupported data_source: {self.data_source}")
 
-        self.s3_checkpoint_path = f"s3://{self.s3_checkpoint_bucket}/{self.s3_checkpoint_prefix}"
+        self.s3_checkpoint_path = f"s3://{self.s3_checkpoint_bucket}/{self.s3_checkpoint_prefix}" 
 
     def __str__(self):
         return (
