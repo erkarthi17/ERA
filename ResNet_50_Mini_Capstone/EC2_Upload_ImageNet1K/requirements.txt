@@ -1,0 +1,29 @@
+# Core PyTorch + torchvision
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0  # optional, but safe to include for completeness
+
+# AWS S3 access via s3fs (wraps boto3 + fsspec)
+s3fs>=2024.5.0
+boto3>=1.34.0
+fsspec>=2024.3.1
+
+# Image processing
+Pillow>=10.0.0
+
+# Progress bar + CLI feedback
+tqdm>=4.66.0
+
+# Optional but strongly recommended
+numpy>=1.26.0          # used internally by PyTorch + torchvision
+pandas>=2.2.0          # for metrics/logging in train_s3.py if you export logs
+matplotlib>=3.8.0      # if you visualize loss/accuracy
+scipy>=1.12.0          # for any augmentation utilities
+
+# Configuration / utilities
+PyYAML>=6.0.1          # if config files are YAML-based
+json5>=0.9.14          # if your config loader supports JSON5
+
+# Logging / tracking (optional but common)
+tensorboard>=2.16.0
+rich>=13.7.0           # prettier logging output
