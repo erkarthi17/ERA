@@ -9,155 +9,138 @@ from tqdm import tqdm
 import multiprocessing
 import json
 import time
-import sys # Added to specify tqdm output stream
+import sys
+import hashlib
 
-# Define ImageNet mean and std for normalization
+# ImageNet normalization
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
+def _safe_cache_path(base_dir, s3_path):
+    """Create a deterministic local cache path for an S3 object."""
+    # Hash to avoid ultra-long filenames
+    rel_key = s3_path.replace("s3://", "")
+    hashed = hashlib.md5(rel_key.encode()).hexdigest()
+    fname = os.path.basename(s3_path)
+    return os.path.join(base_dir, f"{hashed}_{fname}")
+
 class ImageNetS3Dataset(Dataset):
     """
-    A PyTorch Dataset for loading ImageNet data directly from S3.
+    PyTorch Dataset that reads from S3 and transparently caches images locally.
     """
-    def __init__(self, s3_bucket, s3_prefix, transform=None, subset_size=None, 
-                 s3_endpoint_url=None, cache_dir=None, force_relist_s3=False):
+    def __init__(self, s3_bucket, s3_prefix, transform=None, subset_size=None,
+                 s3_endpoint_url=None, cache_dir=".s3_cache", force_relist_s3=False,
+                 max_retries=3):
         self.s3_bucket = s3_bucket
         self.s3_prefix = s3_prefix
         self.transform = transform
         self.s3_endpoint_url = s3_endpoint_url
         self.cache_dir = cache_dir
         self.force_relist_s3 = force_relist_s3
+        self.max_retries = max_retries
 
         if self.s3_endpoint_url:
             self.s3 = s3fs.S3FileSystem(client_kwargs={'endpoint_url': self.s3_endpoint_url})
         else:
             self.s3 = s3fs.S3FileSystem()
 
-        self.s3_image_paths = []
-        self.classes = []
-        self.class_to_idx = {}
-        self.labels = []
+        os.makedirs(self.cache_dir, exist_ok=True)
 
-        # Construct cache file path
-        if self.cache_dir:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            # Create a unique cache filename based on bucket and prefix
-            cache_filename = f"s3_file_list_{s3_bucket}_{s3_prefix.replace('/', '_')}.json"
-            self.cache_filepath = os.path.join(self.cache_dir, cache_filename)
-        else:
-            self.cache_filepath = None
+        # Cached file list
+        cache_file = os.path.join(
+            self.cache_dir,
+            f"s3_file_list_{s3_bucket}_{s3_prefix.replace('/', '_')}.json"
+        )
 
-        # Try to load from cache first
-        if self.cache_filepath and os.path.exists(self.cache_filepath) and not self.force_relist_s3:
-            print(f"[{time.strftime('%H:%M:%S')}] Loading S3 file list from cache: {self.cache_filepath}...")
+        if os.path.exists(cache_file) and not self.force_relist_s3:
+            print(f"[{time.strftime('%H:%M:%S')}] Loading file list from {cache_file}")
             try:
-                with open(self.cache_filepath, 'r') as f:
-                    cached_data = json.load(f)
-                self.s3_image_paths = cached_data['s3_image_paths']
-                print(f"[{time.strftime('%H:%M:%S')}] Successfully loaded {len(self.s3_image_paths)} paths from cache.")
-            except Exception as e:
-                print(f"[{time.strftime('%H:%M:%S')}] Error loading from cache: {e}. Re-listing from S3.")
-                self._list_s3_files() # Fallback to S3 listing
+                with open(cache_file, "r") as f:
+                    data = json.load(f)
+                self.s3_image_paths = data["s3_image_paths"]
+            except Exception:
+                print("Cache load failed — relisting S3.")
+                self.s3_image_paths = self._list_s3_files()
         else:
-            # If no cache or forced relist, list from S3
-            self._list_s3_files()
+            self.s3_image_paths = self._list_s3_files()
+            with open(cache_file, "w") as f:
+                json.dump({"s3_image_paths": self.s3_image_paths}, f)
 
-        # After paths are loaded (either from cache or S3), derive labels
         if not self.s3_image_paths:
-            raise FileNotFoundError(f"No image files found in s3://{s3_bucket}/{s3_prefix}")
-        
-        # Extract class labels from path (e.g., n01440764)
-        # This assumes the directory structure where the immediate parent folder of the image is its class
-        self.classes = sorted(list(set([path.split('/')[-2] for path in self.s3_image_paths])))
-        self.class_to_idx = {cls: i for i, cls in enumerate(self.classes)}
-        self.labels = [self.class_to_idx[path.split('/')[-2]] for path in self.s3_image_paths]
+            raise FileNotFoundError(f"No images found in s3://{s3_bucket}/{s3_prefix}")
 
-        # Apply subset if specified (for faster testing)
-        if subset_size is not None and subset_size > 0:
+        # Build class-to-index mapping
+        self.classes = sorted({p.split("/")[-2] for p in self.s3_image_paths})
+        self.class_to_idx = {cls: i for i, cls in enumerate(self.classes)}
+        self.labels = [self.class_to_idx[p.split("/")[-2]] for p in self.s3_image_paths]
+
+        if subset_size:
             self.s3_image_paths = self.s3_image_paths[:subset_size]
             self.labels = self.labels[:subset_size]
-            print(f"[{time.strftime('%H:%M:%S')}] Using a subset of {len(self.s3_image_paths)} images from s3://{s3_bucket}/{s3_prefix}")
+            print(f"[{time.strftime('%H:%M:%S')}] Using subset of {subset_size} images.")
 
-        print(f"[{time.strftime('%H:%M:%S')}] Found {len(self.s3_image_paths)} images in s3://{s3_bucket}/{s3_prefix}")
-        print(f"[{time.strftime('%H:%M:%S')}] Number of classes: {len(self.classes)}")
+        print(f"[{time.strftime('%H:%M:%S')}] Dataset ready: {len(self.s3_image_paths)} images, {len(self.classes)} classes.")
 
     def _list_s3_files(self):
-        """Helper method to list files from S3 and optionally save to cache."""
-        print(f"[{time.strftime('%H:%M:%S')}] Listing files directly from s3://{self.s3_bucket}/{self.s3_prefix}...")
-        try:
-            start_time = time.time()
-            s3_paths_collector = []
-            
-            extensions = ["jpg", "jpeg", "JPG", "JPEG"]
-            
-            # Use tqdm to show progress through the extensions
-            with tqdm(extensions, desc="Globbing S3 by extension", dynamic_ncols=True, file=sys.stdout) as pbar:
-                for ext in pbar:
-                    current_glob_pattern = f"{self.s3_bucket}/{self.s3_prefix}**/*.{ext}"
-                    pbar.set_postfix_str(f"Globbing for .{ext}...")
-                    
-                    print(f"[{time.strftime('%H:%M:%S')}] Starting glob for: {current_glob_pattern}")
-                    
-                    found_paths_for_ext = self.s3.glob(current_glob_pattern)
-                    s3_paths_collector.extend([f"s3://{path}" for path in found_paths_for_ext])
-                    
-                    pbar.set_postfix_str(f"Found {len(found_paths_for_ext)} .{ext} files. Total: {len(s3_paths_collector)}")
-                    print(f"[{time.strftime('%H:%M:%S')}] Finished glob for .{ext}. Found {len(found_paths_for_ext)} files. Cumulative total: {len(s3_paths_collector)}")
-
-            if not s3_paths_collector:
-                raise FileNotFoundError(f"No image files found in s3://{self.s3_bucket}/{self.s3_prefix}")
-            
-            self.s3_image_paths = sorted(s3_paths_collector)
-
-            if not self.s3_image_paths:
-                raise FileNotFoundError(f"No actual image files found after filtering in s3://{self.s3_bucket}/{self.s3_prefix}")
-            
-            end_time = time.time()
-            print(f"[{time.strftime('%H:%M:%S')}] S3 listing completed in {end_time - start_time:.2f} seconds. Total unique images found: {len(self.s3_image_paths)}.")
-
-            # Save to cache if cache_filepath is defined
-            if self.cache_filepath:
-                with open(self.cache_filepath, 'w') as f:
-                    json.dump({'s3_image_paths': self.s3_image_paths, 'timestamp': time.time()}, f)
-                print(f"[{time.strftime('%H:%M:%S')}] Saved S3 file list to cache: {self.cache_filepath}")
-
-        except Exception as e:
-            print(f"[{time.strftime('%H:%M:%S')}] Error listing S3 files: {e}")
-            raise
+        """List image files from S3 by extension."""
+        print(f"[{time.strftime('%H:%M:%S')}] Listing files in s3://{self.s3_bucket}/{self.s3_prefix}...")
+        start = time.time()
+        paths = []
+        for ext in ["jpg", "jpeg", "JPG", "JPEG"]:
+            pattern = f"{self.s3_bucket}/{self.s3_prefix}**/*.{ext}"
+            found = self.s3.glob(pattern)
+            paths.extend([f"s3://{p}" for p in found])
+        print(f"[{time.strftime('%H:%M:%S')}] Listed {len(paths)} files in {time.time()-start:.1f}s.")
+        return sorted(paths)
 
     def __len__(self):
         return len(self.s3_image_paths)
 
+    def _load_from_s3(self, s3_path):
+        """Download with retries."""
+        for attempt in range(self.max_retries):
+            try:
+                with self.s3.open(s3_path, "rb") as f:
+                    return f.read()
+            except Exception as e:
+                print(f"Retry {attempt+1}/{self.max_retries} for {s3_path}: {e}")
+                time.sleep(1 + attempt)
+        raise IOError(f"Failed to load {s3_path} after {self.max_retries} retries")
+
     def __getitem__(self, idx):
         s3_path = self.s3_image_paths[idx]
         label = self.labels[idx]
+        cache_path = _safe_cache_path(self.cache_dir, s3_path)
 
-        try:
-            # Read image from S3
-            with self.s3.open(s3_path, 'rb') as f:
-                img_bytes = f.read()
-            img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        # Try local cache first
+        if os.path.exists(cache_path):
+            try:
+                img = Image.open(cache_path).convert("RGB")
+            except Exception:
+                os.remove(cache_path)
+                img_bytes = self._load_from_s3(s3_path)
+                with open(cache_path, "wb") as f:
+                    f.write(img_bytes)
+                img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        else:
+            img_bytes = self._load_from_s3(s3_path)
+            with open(cache_path, "wb") as f:
+                f.write(img_bytes)
+            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-            if self.transform:
-                img = self.transform(img)
-
-            return img, label
-        except Exception as e:
-            print(f"[{time.strftime('%H:%M:%S')}] Error loading image {s3_path}: {e}")
-            raise
+        if self.transform:
+            img = self.transform(img)
+        return img, label
 
 
 def get_data_loaders(config):
-    """
-    Creates and returns the training and validation data loaders from S3.
-    """
+    """Return train and validation loaders with caching."""
     train_transform = transforms.Compose([
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
     ])
-
     val_transform = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
@@ -166,50 +149,32 @@ def get_data_loaders(config):
     ])
 
     train_dataset = ImageNetS3Dataset(
-        s3_bucket=config.s3_bucket,
-        s3_prefix=config.s3_prefix_train,
-        transform=train_transform,
-        subset_size=getattr(config, 'train_subset_size', None),
-        cache_dir=getattr(config, 'cache_dir', None),
-        force_relist_s3=getattr(config, 'force_relist_s3', False)
+        config.s3_bucket, config.s3_prefix_train, transform=train_transform,
+        subset_size=getattr(config, "train_subset_size", None),
+        cache_dir=getattr(config, "cache_dir", ".s3_cache"),
+        force_relist_s3=getattr(config, "force_relist_s3", False)
+    )
+    val_dataset = ImageNetS3Dataset(
+        config.s3_bucket, config.s3_prefix_val, transform=val_transform,
+        subset_size=getattr(config, "val_subset_size", None),
+        cache_dir=getattr(config, "cache_dir", ".s3_cache"),
+        force_relist_s3=getattr(config, "force_relist_s3", False)
     )
 
-    val_dataset = ImageNetS3Dataset(
-        s3_bucket=config.s3_bucket,
-        s3_prefix=config.s3_prefix_val,
-        transform=val_transform,
-        subset_size=getattr(config, 'val_subset_size', None),
-        cache_dir=getattr(config, 'cache_dir', None),
-        force_relist_s3=getattr(config, 'force_relist_s3', False)
-    )
-    
-    # Determine the multiprocessing start method for DataLoaders
     mp_context = None
     if config.num_workers > 0:
-        if 'forkserver' in multiprocessing.get_all_start_methods():
-            mp_context = 'forkserver'
-        elif 'spawn' in multiprocessing.get_all_start_methods():
-            mp_context = 'spawn'
-        else:
-            print(f"[{time.strftime('%H:%M:%S')}] Warning: Neither 'forkserver' nor 'spawn' available. DataLoader might fail.")
-    
-    print(f"[{time.strftime('%H:%M:%S')}] Using multiprocessing context for DataLoader: {mp_context}")
+        methods = multiprocessing.get_all_start_methods()
+        mp_context = "forkserver" if "forkserver" in methods else "spawn"
 
+    print(f"[{time.strftime('%H:%M:%S')}] Using multiprocessing context: {mp_context}")
     train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
-        multiprocessing_context=mp_context
+        train_dataset, batch_size=config.batch_size, shuffle=True,
+        num_workers=config.num_workers, pin_memory=config.pin_memory,
+        multiprocessing_context=mp_context, timeout=getattr(config, "dataloader_timeout", 0)
     )
-
     val_loader = DataLoader(
-        val_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
-        multiprocessing_context=mp_context
+        val_dataset, batch_size=config.batch_size, shuffle=False,
+        num_workers=config.num_workers, pin_memory=config.pin_memory,
+        multiprocessing_context=mp_context, timeout=getattr(config, "dataloader_timeout", 0)
     )
     return train_loader, val_loader
