@@ -12,8 +12,8 @@ from botocore.exceptions import NoCredentialsError, ClientError
 
 # ====== CONFIGURE THIS SECTION ======
 S3_BUCKET = "imagenet-dataset-karthick-kannan"
-S3_PREFIX = "imagenet-1k/validation/"   # Change to 'validation/' to check val data
-LOCAL_DIR = "/home/ubuntu/imagenet_local/validation"
+S3_PREFIX = "imagenet-1k/train/"   # Change to 'validation/' to check val data
+LOCAL_DIR = "/home/ubuntu/imagenet_local/train"
 REGION = "us-east-1"  # Optional, only if your EC2 isn't in same region
 CHECK_INTERVAL = 60   # seconds between checks
 # ====================================
