@@ -57,7 +57,7 @@ class Config(BaseConfig):
         for d in [self.checkpoint_dir, self.log_dir, self.cache_dir]:
             os.makedirs(d, exist_ok=True)
 
-        self.build_paths()
+        self._build_paths()
 
     def _build_paths(self):
         # Construct paths dynamically based on source
