@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # train_s3.py -- stall-resistant, S3-streaming aware training loop for ResNet-50
 
 import argparse
@@ -586,16 +587,15 @@ def main():
         config.resume_from_s3_latest = True
 
     # === Data Source CLI Overrides ===
+    # These are applied *before* any checkpoint loading.
+    # We will re-apply them AFTER checkpoint loading as well.
     if args.data_source:
         config.data_source = args.data_source
     if args.data_root:
         # If using ebs, data_root from CLI should be respected
         if config.data_source == 'ebs':
             config.ebs_root = args.data_root
-        else:
-            # For s3, this CLI arg is not used, but we can note it.
-            # The s3 paths are constructed from bucket and prefix.
-            pass
+        # The 'else' condition is not needed here as data_root is specifically for EBS
 
     config._build_paths()
 
@@ -724,15 +724,6 @@ def main():
     best_train_acc1 = 0.0
     resume_checkpoint_path = None
 
-    # Store CLI args that should override checkpoint config
-    cli_data_source = args.data_source
-    cli_data_root = args.data_root
-    cli_s3_bucket = args.s3_bucket
-    cli_s3_prefix_train = args.s3_prefix_train
-    cli_s3_prefix_val = args.s3_prefix_val
-    cli_s3_checkpoint_bucket = args.s3_checkpoint_bucket
-    cli_s3_checkpoint_prefix = args.s3_checkpoint_prefix
-
     # CLI resume path overrides
     if getattr(config, "resume", False) and getattr(config, "resume_path", None):
         resume_checkpoint_path = config.resume_path
@@ -755,26 +746,69 @@ def main():
             start_batch_idx = checkpoint.get('batch_idx', 0) + 1
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
+            
+            # Create a new Config object from the loaded checkpoint's config
+            # This ensures that the base configuration comes from the checkpoint
+            if 'config' in checkpoint:
+                checkpoint_config_dict = checkpoint['config']
+                # Convert dataclass back to dict if it was saved as one
+                if not isinstance(checkpoint_config_dict, dict):
+                    # For older Python versions, dataclass objects saved directly might not be dicts
+                    # We need to ensure it's a dict for Config(**...)
+                    checkpoint_config_dict = checkpoint_config_dict.__dict__
+                
+                # Create a new Config object from the checkpoint's saved config
+                # This ensures that the base configuration is set from the checkpoint
+                config = Config(**checkpoint_config_dict)
+            
+            # Re-apply CLI arguments to override the checkpoint's config
+            # This ensures that the current command-line instructions take precedence
+            if args.batch_size:
+                config.batch_size = args.batch_size
+            if args.epochs:
+                config.epochs = args.epochs
+            if args.lr:
+                config.learning_rate = args.lr
+            if args.train_subset:
+                config.train_subset_size = args.train_subset
+            if args.val_subset:
+                config.val_subset_size = args.val_subset
+            if args.resume:
+                config.resume = True
+                config.resume_path = args.resume
+            if args.save_every_n_batches is not None:
+                config.save_every_n_batches = args.save_every_n_batches
+            if args.log_interval:
+                config.log_interval = args.log_interval
+            if args.s3_bucket:
+                config.s3_bucket = args.s3_bucket
+            if args.s3_prefix_train:
+                config.s3_prefix_train = args.s3_prefix_train
+            if args.s3_prefix_val:
+                config.s3_prefix_val = args.s3_prefix_val
+            if args.cache_dir:
+                config.cache_dir = args.cache_dir
+            if args.force_relist_s3:
+                config.force_relist_s3 = True
+            if args.s3_checkpoint_bucket:
+                config.s3_checkpoint_bucket = args.s3_checkpoint_bucket
+            if args.s3_checkpoint_prefix:
+                config.s3_checkpoint_prefix = args.s3_checkpoint_prefix
+            if args.resume_from_s3_latest:
+                config.resume_from_s3_latest = True
 
-             # Re-apply CLI arguments to override checkpoint config for data source
-            if cli_data_source:
-                config.data_source = cli_data_source
-            if cli_data_root:
-                config.ebs_root = cli_data_root # Assuming data_root maps to ebs_root if data_source is ebs
-            if cli_s3_bucket:
-                config.s3_bucket = cli_s3_bucket
-            if cli_s3_prefix_train:
-                config.s3_prefix_train = cli_s3_prefix_train
-            if cli_s3_prefix_val:
-                config.s3_prefix_val = cli_s3_prefix_val
-            if cli_s3_checkpoint_bucket:
-                config.s3_checkpoint_bucket = cli_s3_checkpoint_bucket
-            if cli_s3_checkpoint_prefix:
-                config.s3_checkpoint_prefix = cli_s3_checkpoint_prefix
+            # Re-apply data source CLI overrides specifically, *after* other CLI overrides
+            # This is crucial for ensuring data_source and data_root are respected.
+            if args.data_source:
+                config.data_source = args.data_source
+            if args.data_root:
+                # Only apply data_root if the data_source is actually EBS
+                if config.data_source == 'ebs':
+                    config.ebs_root = args.data_root
             
             # Re-build paths after potentially overriding with CLI args
             config._build_paths()
-            
+
             if start_batch_idx >= len(train_loader):
                 start_epoch += 1
                 start_batch_idx = 0
