@@ -723,6 +723,16 @@ def main():
     best_acc1 = 0.0
     best_train_acc1 = 0.0
     resume_checkpoint_path = None
+
+    # Store CLI args that should override checkpoint config
+    cli_data_source = args.data_source
+    cli_data_root = args.data_root
+    cli_s3_bucket = args.s3_bucket
+    cli_s3_prefix_train = args.s3_prefix_train
+    cli_s3_prefix_val = args.s3_prefix_val
+    cli_s3_checkpoint_bucket = args.s3_checkpoint_bucket
+    cli_s3_checkpoint_prefix = args.s3_checkpoint_prefix
+
     # CLI resume path overrides
     if getattr(config, "resume", False) and getattr(config, "resume_path", None):
         resume_checkpoint_path = config.resume_path
@@ -745,6 +755,26 @@ def main():
             start_batch_idx = checkpoint.get('batch_idx', 0) + 1
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
+
+             # Re-apply CLI arguments to override checkpoint config for data source
+            if cli_data_source:
+                config.data_source = cli_data_source
+            if cli_data_root:
+                config.ebs_root = cli_data_root # Assuming data_root maps to ebs_root if data_source is ebs
+            if cli_s3_bucket:
+                config.s3_bucket = cli_s3_bucket
+            if cli_s3_prefix_train:
+                config.s3_prefix_train = cli_s3_prefix_train
+            if cli_s3_prefix_val:
+                config.s3_prefix_val = cli_s3_prefix_val
+            if cli_s3_checkpoint_bucket:
+                config.s3_checkpoint_bucket = cli_s3_checkpoint_bucket
+            if cli_s3_checkpoint_prefix:
+                config.s3_checkpoint_prefix = cli_s3_checkpoint_prefix
+            
+            # Re-build paths after potentially overriding with CLI args
+            config._build_paths()
+            
             if start_batch_idx >= len(train_loader):
                 start_epoch += 1
                 start_batch_idx = 0
