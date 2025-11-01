@@ -84,7 +84,7 @@ def monitor_sync():
             eta_seconds = remaining / speed if speed > 0 else float("inf")
 
             # Format ETA
-            eta_h = int(eta_seconds // 3600)
+            # eta_h = int(eta_seconds // 3600)
             eta_m = int((eta_seconds % 3600) // 60)
             eta_s = int(eta_seconds % 60)
 
@@ -94,7 +94,8 @@ def monitor_sync():
                 f"Local: {human_readable_size(local_size)} / {human_readable_size(s3_total_size)} "
                 f"({local_files:,}/{s3_total_files:,} files) | "
                 f"Speed: {human_readable_size(speed)}/s | "
-                f"ETA: {eta_h}h {eta_m}m {eta_s}s"
+                # f"ETA: {eta_h}h {eta_m}m {eta_s}s"
+                f"ETA: {eta_m}m {eta_s}s"
             )
 
             prev_local_size = local_size
