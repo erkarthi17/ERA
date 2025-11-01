@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # train_s3.py -- stall-resistant, S3-streaming aware training loop for ResNet-50
 
 import argparse
@@ -585,6 +584,18 @@ def main():
         config.s3_checkpoint_prefix = args.s3_checkpoint_prefix
     if args.resume_from_s3_latest:
         config.resume_from_s3_latest = True
+
+    # === Data Source CLI Overrides ===
+    if args.data_source:
+        config.data_source = args.data_source
+    if args.data_root:
+        # If using ebs, data_root from CLI should be respected
+        if config.data_source == 'ebs':
+            config.ebs_root = args.data_root
+        else:
+            # For s3, this CLI arg is not used, but we can note it.
+            # The s3 paths are constructed from bucket and prefix.
+            pass
 
     # Precision defaults
     config.mixed_precision = True
