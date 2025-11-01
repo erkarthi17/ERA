@@ -23,14 +23,14 @@ import boto3
 import botocore
 
 # # Try to import NVML binding in a robust way (support both nvidia_smi and py3nvml)
-# _nvidia_module = None
-# try:
-#     import nvidia_smi as _nvidia_module  # preferred
-# except Exception:
-#     try:
-#         from py3nvml import py3nvml as _nvidia_module
-#     except Exception:
-#         _nvidia_module = None
+_nvidia_module = None
+try:
+    import nvidia_smi as _nvidia_module  # preferred
+except Exception:
+    try:
+        from py3nvml import py3nvml as _nvidia_module
+    except Exception:
+        _nvidia_module = None
 
 # Local imports (assumes package layout)
 from .config import Config
