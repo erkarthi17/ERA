@@ -24,7 +24,7 @@ class Config(BaseConfig):
     # Root mount path for EBS (adjust this based on your instance)
     ebs_root: str = "/home/ubuntu/imagenet_local"
     ebs_train_dir: str = "train"
-    ebs_val_dir: str = "val"
+    ebs_val_dir: str = "validation"
 
     # ---- General training subsets ----
     train_subset_size: Optional[int] = None
