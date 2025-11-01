@@ -597,6 +597,8 @@ def main():
             # The s3 paths are constructed from bucket and prefix.
             pass
 
+    config._build_paths()
+
     # Precision defaults
     config.mixed_precision = True
     config.use_bf16 = False
