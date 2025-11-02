@@ -525,7 +525,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=None, help='Number of epochs')
     parser.add_argument('--lr', type=float, default=None, help='Learning rate')
     # === Data Source Selection ===
-    parser.add_argument("--data-source", type=str, default="s3", choices=["s3", "ebs"], help="Select data source: 's3' for S3-based dataset or 'ebs' for local EBS dataset")
+    parser.add_argument("--data-source", type=str, default=None, choices=["s3", "ebs"], help="Select data source: 's3' for S3-based dataset or 'ebs' for local EBS dataset")
     parser.add_argument("--data-root", type=str, default="./data/imagenet", help="Local path to dataset root when using data-source='ebs'")
     parser.add_argument('--train-subset', type=int, default=None, help='Training subset size (for testing)')
     parser.add_argument('--val-subset', type=int, default=None, help='Validation subset size (for testing)')
