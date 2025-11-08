@@ -750,90 +750,30 @@ def main():
 
     if resume_checkpoint_path:
         try:
-            checkpoint = load_checkpoint(resume_checkpoint_path, model, optimizer, scheduler, logger)
-            start_epoch = checkpoint.get('epoch', 0)
-            start_batch_idx = checkpoint.get('batch_idx', 0) + 1
+            # When resuming with a new optimizer/scheduler, we only load the model weights,
+            # not the optimizer, scheduler, or config from the old checkpoint.
+            logger.info("Resuming with new optimizer/scheduler. Loading model weights only.")
+            checkpoint = load_checkpoint(
+                resume_checkpoint_path,
+                model,
+                optimizer=None, # Do not load incompatible optimizer state
+                scheduler=None, # Do not load incompatible scheduler state
+                logger=logger
+            )
+
+            # The saved epoch is the one that was completed or in progress. Start the next one.
+            start_epoch = checkpoint.get('epoch', 0) + 1
+            start_batch_idx = 0  # Always start a fresh epoch
+
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
-            
-            # Temporary flag to determine if data_source should be forced to 'ebs'
-            # This is true if resuming from a local path AND --data-source was NOT explicitly provided.
-            force_ebs_data_source_on_resume = False
-            if not resume_checkpoint_path.startswith('s3://') and args.data_source is None:
-                force_ebs_data_source_on_resume = True
 
-            # Merge checkpoint config into the current config object
-            # This applies most settings from the checkpoint, but allows for specific CLI overrides later.
-            if 'config' in checkpoint:
-                checkpoint_config_dict = checkpoint['config']
-                if not isinstance(checkpoint_config_dict, dict):
-                    # For older Python versions, dataclass objects saved directly might not be dicts
-                    # We need to ensure it's a dict for Config(**...)
-                    checkpoint_config_dict = checkpoint_config_dict.__dict__
-                
-                # Update current config with values from checkpoint's config
-                # We iterate and set attributes to avoid creating a brand new Config object,
-                # which would re-run __post_init__ and potentially reset paths prematurely.
-                for key, value in checkpoint_config_dict.items():
-                    setattr(config, key, value)
-            
-            # Re-apply CLI arguments *after* loading checkpoint config
-            # This ensures CLI arguments always take final precedence for these settings.
-            if args.batch_size:
-                config.batch_size = args.batch_size
-            if args.epochs:
-                config.epochs = args.epochs
-            if args.lr:
-                config.learning_rate = args.lr
-            if args.train_subset:
-                config.train_subset_size = args.train_subset
-            if args.val_subset:
-                config.val_subset_size = args.val_subset
-            # args.resume and args.resume_path are already handled by resume_checkpoint_path logic
-            if args.save_every_n_batches is not None:
-                config.save_every_n_batches = args.save_every_n_batches
-            if args.log_interval:
-                config.log_interval = args.log_interval
-            
-            # Explicitly re-apply S3 related CLI args for consistency, as they might also
-            # be present in the checkpoint config.
-            if args.s3_bucket:
-                config.s3_bucket = args.s3_bucket
-            if args.s3_prefix_train:
-                config.s3_prefix_train = args.s3_prefix_train
-            if args.s3_prefix_val:
-                config.s3_prefix_val = args.s3_prefix_val
-            if args.cache_dir:
-                config.cache_dir = args.cache_dir
-            if args.force_relist_s3:
-                config.force_relist_s3 = True
-            if args.s3_checkpoint_bucket:
-                config.s3_checkpoint_bucket = args.s3_checkpoint_bucket
-            if args.s3_checkpoint_prefix:
-                config.s3_checkpoint_prefix = args.s3_checkpoint_prefix
-            if args.resume_from_s3_latest:
-                config.resume_from_s3_latest = True
+            logger.info(f"Resumed model weights from checkpoint (epoch {checkpoint.get('epoch', 0) + 1}). "
+                        f"New training will start from epoch {start_epoch + 1}.")
 
-            # Data source specific override logic:
-            # If a local checkpoint is resumed AND --data-source was NOT explicitly provided,
-            # then assume EBS data source. Otherwise, respect the CLI arg or checkpoint config.
-            if force_ebs_data_source_on_resume:
-                config.data_source = 'ebs'
-                # If data_root was explicitly provided on CLI, use it. Otherwise, rely on config's default or checkpoint's ebs_root.
-                if args.data_root: 
-                    config.ebs_root = args.data_root
-            elif args.data_source: # If --data-source was explicitly provided on CLI
-                config.data_source = args.data_source
-                if args.data_root and config.data_source == 'ebs':
-                    config.ebs_root = args.data_root
-            
-            # Re-build paths to ensure they reflect the final, prioritized config
-            config._build_paths()
+            # IMPORTANT: We DO NOT load the config from the checkpoint, as we are using a new one.
+            # The logic for overriding config with checkpoint data is intentionally skipped.
 
-            if start_batch_idx >= len(train_loader):
-                start_epoch += 1
-                start_batch_idx = 0
-            logger.info(f"Resuming at epoch {start_epoch+1}, batch {start_batch_idx+1}")
         except Exception as e:
             logger.error(f"Failed to load checkpoint {resume_checkpoint_path}: {e}. Starting from scratch.")
 
