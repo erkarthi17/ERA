@@ -360,7 +360,11 @@ def get_optimizer(model, config):
                          weight_decay=getattr(config, "weight_decay", 1e-4),
                          nesterov=getattr(config, "nesterov", False))
     elif opt_name == "adam":
-        return optim.Adam(model.parameters(), lr=config.learning_rate, weight_decay=getattr(config, "weight_decay", 1e-4))
+        return optim.Adam(
+        model.parameters(),
+        lr=config.learning_rate,
+        betas=getattr(config, "betas", (0.9, 0.999)),
+        weight_decay=getattr(config, "weight_decay", 1e-4))
     elif opt_name == "adamw":
         return optim.AdamW(model.parameters(), lr=config.learning_rate, weight_decay=getattr(config, "weight_decay", 1e-4))
     else:

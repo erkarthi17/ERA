@@ -11,3 +11,4 @@ onecycle_final_div_factor: 10000
 save_every_n_batches: 500
 log_interval: 100
 use_fp16: true
+betas: [0.9, 0.999]
