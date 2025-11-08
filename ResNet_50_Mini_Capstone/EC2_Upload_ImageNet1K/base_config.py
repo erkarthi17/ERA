@@ -29,6 +29,7 @@ class Config:
     learning_rate: float = 0.1
     momentum: float = 0.9
     weight_decay: float = 1e-4
+    betas: tuple = (0.9, 0.999)
     
     # Learning rate schedule
     lr_scheduler: str = "step"  # 'step' or 'cosine'
