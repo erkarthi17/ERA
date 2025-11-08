@@ -228,7 +228,7 @@ def save_checkpoint(
                 logger.error(f"Error uploading best model to S3: {e}")
 
 
-def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_scheduler=None, logger: Optional[logging.Logger] = None):
+def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, scheduler=None, logger: Optional[logging.Logger] = None):
     """
     Load training checkpoint from a local path or an S3 path.
     Downloads from S3 to /tmp/ if an S3 path is provided.
@@ -237,7 +237,7 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
         checkpoint_path: Path to checkpoint file (local or S3 URL)
         model: Model to load weights into
         optimizer: Optimizer to load state into (optional)
-        lr_scheduler: Learning rate scheduler to load state into (optional)
+        scheduler: Learning rate scheduler to load state into (optional)
         logger: Logger instance for output (optional)
     
     Returns:
@@ -258,6 +258,7 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
         
         current_logger.info(f"Attempting to download checkpoint from s3://{s3_bucket}/{s3_object_key} to {local_path_to_load}")
         try:
+            # Note: Assumes s3_client is initialized globally in this file
             s3_client.download_file(s3_bucket, s3_object_key, local_path_to_load)
             current_logger.info("Download successful. Loading checkpoint...")
         except s3_client.exceptions.ClientError as e:
@@ -278,17 +279,23 @@ def load_checkpoint(checkpoint_path: str, model: nn.Module, optimizer=None, lr_s
     # Load model state
     model.load_state_dict(checkpoint['model_state_dict'])
     
-    # Load optimizer state
+    # Conditionally load optimizer state
     if optimizer is not None and 'optimizer_state_dict' in checkpoint:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        current_logger.info("Loaded optimizer state from checkpoint.")
+    elif optimizer is not None:
+        current_logger.warning("Optimizer state not found in checkpoint. Skipping.")
     
-    # Load scheduler state
-    if lr_scheduler is not None and 'scheduler_state_dict' in checkpoint:
-        lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    # Conditionally load scheduler state
+    if scheduler is not None and 'scheduler_state_dict' in checkpoint:
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        current_logger.info("Loaded scheduler state from checkpoint.")
+    elif scheduler is not None:
+        current_logger.warning("Scheduler state not found in checkpoint. Skipping.")
     
     current_logger.info(
         f"Loaded checkpoint from epoch {checkpoint.get('epoch', 'N/A')}"
-        f" batch {checkpoint.get('batch_idx', 'N/A')}" # Added batch_idx
+        f" batch {checkpoint.get('batch_idx', 'N/A')}"
         f" with best_acc1: {checkpoint.get('best_acc1', 0):.2f}%"
     )
     
