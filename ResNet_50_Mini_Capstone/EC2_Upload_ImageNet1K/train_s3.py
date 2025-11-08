@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
+import yaml
 
 # boto3 for explicit S3 health checks & fallback listing (we still rely on utils.get_latest_s3_checkpoint)
 import boto3
@@ -585,6 +586,12 @@ def main():
         config.s3_checkpoint_prefix = args.s3_checkpoint_prefix
     if args.resume_from_s3_latest:
         config.resume_from_s3_latest = True
+    if args.config:
+        with open(args.config, 'r') as f:
+            config_dict = yaml.safe_load(f)
+        for key, value in config_dict.items():
+            setattr(config, key, value)
+
 
     # Critical: Apply data source and data root from CLI now
     # These will be the primary source of truth for these settings
