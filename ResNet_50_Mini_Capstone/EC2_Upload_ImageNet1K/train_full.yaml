@@ -1,0 +1,22 @@
+    # Full 90-epoch training configuration for ResNet-50
+    optimizer: adamw
+    lr_scheduler: onecycle
+    learning_rate: 0.003           # Use the original, higher max learning rate
+    weight_decay: 0.0001
+    epochs: 90                     # The full training schedule
+
+    # --- Regularization Improvements ---
+    label_smoothing: 0.1
+    mixup_alpha: 0.2
+
+    # --- OneCycleLR specific settings ---
+    onecycle_pct_start: 0.3
+    onecycle_anneal: cos
+    onecycle_final_div_factor: 10000
+
+    # --- Performance & Logging ---
+    compile_model: true
+    batch_size: 256
+    save_every_n_batches: 500
+    log_interval: 100
+    use_fp16: true
