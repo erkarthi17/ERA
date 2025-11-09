@@ -752,7 +752,7 @@ def main():
         try:
             # When resuming with a new optimizer/scheduler, we only load the model weights,
             # not the optimizer, scheduler, or config from the old checkpoint.
-            logger.info("Resuming with new optimizer/scheduler. Loading model weights only.")
+            logger.info("Fine-turning from checkpoint. Loading model weights only.")
             checkpoint = load_checkpoint(
                 resume_checkpoint_path,
                 model,
@@ -762,15 +762,15 @@ def main():
             )
 
             # The saved epoch is the one that was completed or in progress. Start the next one.
-            start_epoch = checkpoint.get('epoch', 0) + 1
+            start_epoch = 0
             start_batch_idx = 0  # Always start a fresh epoch
 
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
 
-            logger.info(f"Resumed model weights from checkpoint (epoch {checkpoint.get('epoch', 0) + 1}). "
-                        f"New training will start from epoch {start_epoch + 1}.")
-
+            # logger.info(f"Resumed model weights from checkpoint (epoch {checkpoint.get('epoch', 0) + 1}). "
+                        # f"New training will start from epoch {start_epoch + 1}.")
+            logger.info(f"Loaded model weights. New fine-tuning will start from epoch 1.")
             # IMPORTANT: We DO NOT load the config from the checkpoint, as we are using a new one.
             # The logic for overriding config with checkpoint data is intentionally skipped.
 
