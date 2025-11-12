@@ -1,18 +1,36 @@
 # Aggressive fine-tuning configuration to combat overfitting
+#optimizer: adamw
+#lr_scheduler: onecycle
+#learning_rate: 0.0003          # Keep the low learning rate, this is correct
+#weight_decay: 0.0002           # INCREASED: Stronger L2 regularization
+#epochs: 40                     # Keep the 40-epoch schedule
+
+# --- Regularization Improvements ---
+#label_smoothing: 0.1
+#mixup_alpha: 0.4               # INCREASED: More aggressive Mixup augmentation
+
+# --- OneCycleLR specific settings ---
+#onecycle_pct_start: 0.3
+#onecycle_anneal: cos
+#onecycle_final_div_factor: 10000
+
+# --- Performance & Logging ---
+#compile_model: true
+#batch_size: 256
+#save_every_n_batches: 500
+#log_interval: 100
+#use_fp16: true
+
+# "Shock Therapy" fine-tuning to break performance plateau
 optimizer: adamw
-lr_scheduler: onecycle
-learning_rate: 0.0003          # Keep the low learning rate, this is correct
-weight_decay: 0.0002           # INCREASED: Stronger L2 regularization
-epochs: 40                     # Keep the 40-epoch schedule
+lr_scheduler: cosine          # SWITCHED to CosineAnnealingLR
+learning_rate: 0.0005         # INCREASED LR slightly to learn from harder augmentations
+weight_decay: 0.0002
+epochs: 50                    # A longer 50-epoch schedule for this final push
 
 # --- Regularization Improvements ---
 label_smoothing: 0.1
-mixup_alpha: 0.4               # INCREASED: More aggressive Mixup augmentation
-
-# --- OneCycleLR specific settings ---
-onecycle_pct_start: 0.3
-onecycle_anneal: cos
-onecycle_final_div_factor: 10000
+mixup_alpha: 0.4
 
 # --- Performance & Logging ---
 compile_model: true
