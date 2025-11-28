@@ -19,6 +19,14 @@ import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 import yaml
 
+# Import torchvision transforms v2 for Mixup/CutMix
+try:
+    from torchvision.transforms import v2
+except ImportError:
+    # Fallback or warning if v2 is not available (though requirements say >=0.16)
+    import torchvision.transforms as v2
+    print("Warning: torchvision.transforms.v2 not found, trying standard transforms (might fail for Mixup).")
+
 # boto3 for explicit S3 health checks & fallback listing (we still rely on utils.get_latest_s3_checkpoint)
 import boto3
 import botocore
@@ -170,7 +178,8 @@ def train_one_epoch(
     scheduler=None,
     start_batch_idx=0,
     current_best_acc1=0.0,
-    current_best_train_acc1=0.0
+    current_best_train_acc1=0.0,
+    mixup_fn=None
 ):
     batch_time = AverageMeter('Time', '6.3f')
     data_time = AverageMeter('Data', '6.3f')
@@ -225,10 +234,21 @@ def train_one_epoch(
         target = target.to(config.device, non_blocking=True)
 
         with autocast_ctx:
+            # Apply Mixup/CutMix if enabled
+            if mixup_fn is not None:
+                images, target = mixup_fn(images, target)
+            
             output = model(images)
             loss = criterion(output, target) / grad_accum_steps
 
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        # For accuracy, we need to recover the hard labels if mixup was applied
+        if mixup_fn is not None:
+            # target is (batch_size, num_classes)
+            acc_target = target.argmax(dim=1)
+        else:
+            acc_target = target
+
+        acc1, acc5 = accuracy(output, acc_target, topk=(1, 5))
 
         losses.update(loss.item() * grad_accum_steps, images.size(0))
         top1.update(acc1[0], images.size(0))
@@ -725,6 +745,24 @@ def main():
         logger.info("LR Finder complete.")
         shutdown_nvml()
         return
+    
+    # Mixup / CutMix setup
+    mixup_fn = None
+    mixup_alpha = getattr(config, "mixup_alpha", 0.0)
+    cutmix_alpha = getattr(config, "cutmix_alpha", 0.0)
+    
+    if mixup_alpha > 0.0 or cutmix_alpha > 0.0:
+        logger.info(f"Enabling Mixup (alpha={mixup_alpha}) and CutMix (alpha={cutmix_alpha})")
+        num_classes = getattr(config, "num_classes", 1000)
+        
+        mixup_transforms = []
+        if mixup_alpha > 0.0:
+            mixup_transforms.append(v2.MixUp(alpha=mixup_alpha, num_classes=num_classes))
+        if cutmix_alpha > 0.0:
+            mixup_transforms.append(v2.CutMix(alpha=cutmix_alpha, num_classes=num_classes))
+            
+        if mixup_transforms:
+            mixup_fn = v2.RandomChoice(mixup_transforms)
 
     # Resume logic
     start_epoch = 0
@@ -750,29 +788,26 @@ def main():
 
     if resume_checkpoint_path:
         try:
-            # When resuming with a new optimizer/scheduler, we only load the model weights,
-            # not the optimizer, scheduler, or config from the old checkpoint.
-            logger.info("Fine-turning from checkpoint. Loading model weights only.")
+            # Resume training from checkpoint - load model, optimizer, and scheduler states
+            logger.info("Resuming training from checkpoint. Loading model, optimizer, and scheduler states.")
             checkpoint = load_checkpoint(
                 resume_checkpoint_path,
                 model,
-                optimizer=None, # Do not load incompatible optimizer state
-                scheduler=None, # Do not load incompatible scheduler state
+                optimizer=optimizer,  # Load optimizer state
+                scheduler=scheduler,  # Load scheduler state
                 logger=logger
             )
 
-            # The saved epoch is the one that was completed or in progress. Start the next one.
-            start_epoch = 0
-            start_batch_idx = 0  # Always start a fresh epoch
+            # Resume from the next epoch after the saved one
+            start_epoch = checkpoint.get('epoch', 0) + 1
+            start_batch_idx = 0  # Start fresh epoch (mid-epoch resume not supported in this mode)
 
             best_acc1 = checkpoint.get('best_acc1', 0.0)
             best_train_acc1 = checkpoint.get('best_train_acc1', 0.0)
 
-            # logger.info(f"Resumed model weights from checkpoint (epoch {checkpoint.get('epoch', 0) + 1}). "
-                        # f"New training will start from epoch {start_epoch + 1}.")
-            logger.info(f"Loaded model weights. New fine-tuning will start from epoch 1.")
-            # IMPORTANT: We DO NOT load the config from the checkpoint, as we are using a new one.
-            # The logic for overriding config with checkpoint data is intentionally skipped.
+            logger.info(f"Resumed from checkpoint (epoch {checkpoint.get('epoch', 0) + 1} completed). "
+                        f"Continuing training from epoch {start_epoch + 1}.")
+            logger.info(f"Best validation accuracy so far: {best_acc1:.2f}%")
 
         except Exception as e:
             logger.error(f"Failed to load checkpoint {resume_checkpoint_path}: {e}. Starting from scratch.")
@@ -814,7 +849,8 @@ def main():
                 scheduler=scheduler,
                 start_batch_idx=start_batch_idx,
                 current_best_acc1=best_acc1,
-                current_best_train_acc1=best_train_acc1
+                current_best_train_acc1=best_train_acc1,
+                mixup_fn=mixup_fn
             )
 
         history_train_losses.append(train_loss)

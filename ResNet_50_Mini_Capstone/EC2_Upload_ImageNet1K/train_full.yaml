@@ -8,6 +8,7 @@
     # --- Regularization Improvements ---
     label_smoothing: 0.1
     mixup_alpha: 0.2
+    cutmix_alpha: 1.0
 
     # --- OneCycleLR specific settings ---
     onecycle_pct_start: 0.3

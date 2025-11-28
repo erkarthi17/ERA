@@ -15,28 +15,6 @@ def get_data_loaders(config):
     else:
         interpolation = transforms.InterpolationMode.BILINEAR
 
-
-    train_transform_list = [
-        transforms.RandomResizedCrop(config.image_size, interpolation=interpolation),
-        transforms.RandomHorizontalFlip(),
-    ]
-
-    # Add RandAugment if desired (controlled by mixup_alpha as an indicator for advanced aug)
-    # A mixup_alpha > 0.0 often implies advanced augmentation is desired
-    if getattr(config, 'mixup_alpha', 0.0) > 0.0:
-        # RandAugment parameters can be configured via config if needed,
-        # otherwise use reasonable defaults.
-        # N=2, M=9 are common defaults (2 operations, magnitude 9 out of 30)
-        train_transform_list.append(transforms.RandAugment(
-            num_ops=getattr(config, 'randaugment_num_ops', 2),
-            magnitude=getattr(config, 'randaugment_magnitude', 9),
-            interpolation=interpolation
-        ))
-    
-    # Add ColorJitter if enabled in config
-    if getattr(config, 'color_jitter', 0.0) > 0:
-        train_transform_list.append(transforms.ColorJitter(config.color_jitter, config.color_jitter, config.color_jitter))
-
     train_transform_list.extend([
         transforms.ToTensor(),
         normalize,
