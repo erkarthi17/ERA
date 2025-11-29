@@ -28,7 +28,7 @@ This project implements a **custom BPE tokenizer** specifically designed for **s
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/erkarthi17/ERA/tree/45df720b665c2695541e32a1daf1a868d99339f3/Stock_Market_BPE
 cd Stock_Market_BPE
 
 # Install dependencies
@@ -217,7 +217,7 @@ api.upload_file(
 
 ### 🔗 HuggingFace Links
 
-- 🌐 **Model:** `https://huggingface.co/your-username/stock-bpe-tokenizer`
+- 🌐 **Model:** `https://huggingface.co/itzkarthickkannan/stock-bpe-tokenizer`
 - 📓 **Demo:** Interactive tokenization examples
 - 📚 **Docs:** Complete usage guide
 
@@ -310,9 +310,9 @@ pip install yfinance pandas tqdm regex
 - [x] 🎓 Trained BPE tokenizer
 - [x] 📚 Vocabulary > 5,000 tokens
 - [x] 🗜️ Compression ratio ≥ 3.0
-- [ ] 🤗 Uploaded to HuggingFace
-- [ ] 📝 Created GitHub repository
-- [ ] 📓 Added usage examples
+- [x] 🤗 Uploaded to HuggingFace
+- [x] 📝 Created GitHub repository
+- [x] 📓 Added usage examples
 
 ---
 
@@ -338,9 +338,9 @@ pip install yfinance pandas tqdm regex
 
 ### 🔗 Links
 
-- 🌐 **GitHub:** `<your-repo-url>`
-- 🤗 **HuggingFace:** `<your-hf-model-url>`
-- 📧 **Contact:** `<your-email>`
+- 🌐 **GitHub:** `https://github.com/erkarthi17/ERA/tree/45df720b665c2695541e32a1daf1a868d99339f3/Stock_Market_BPE`
+- 🤗 **HuggingFace:** `https://huggingface.co/itzkarthickkannan/stock-bpe-tokenizer`
+- 📧 **Contact:** `erkarthi17@gmail.com`
 
 ---
 

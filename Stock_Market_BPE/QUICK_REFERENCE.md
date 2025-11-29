@@ -71,7 +71,7 @@ from huggingface_hub import HfApi
 api = HfApi()
 api.upload_folder(
     folder_path=".",
-    repo_id="your-username/stock-bpe-tokenizer",
+    repo_id="itzkarthickkannan/stock-bpe-tokenizer",
     repo_type="model"
 )
 ```
@@ -81,7 +81,7 @@ api.upload_folder(
 git init
 git add .
 git commit -m "Stock Market BPE Tokenizer"
-git remote add origin <your-repo-url>
+git remote add origin https://github.com/erkarthi17/ERA/tree/45df720b665c2695541e32a1daf1a868d99339f3/Stock_Market_BPE
 git push -u origin main
 ```
 
@@ -112,22 +112,17 @@ git push -u origin main
 - [x] Code implementation complete
 - [x] Documentation with emojis
 - [x] Example usage notebook
-- [/] Training in progress
-- [ ] Results verified (> 5000 vocab, ≥ 3.0 compression)
-- [ ] HuggingFace upload
-- [ ] GitHub repository
-- [ ] Share links
+- [x] Training in progress
+- [x] Results verified (> 5000 vocab, ≥ 3.0 compression)
+- [x] HuggingFace upload
+- [x] GitHub repository
+- [x] Share links
 
 ---
 
 ## 🔗 Links to Share
 
-**GitHub:** `<your-repo-url>`  
-**HuggingFace:** `<your-hf-model-url>`  
-**Compression Ratio:** `3.5x` (after training)  
+**GitHub:** `https://github.com/erkarthi17/ERA/tree/45df720b665c2695541e32a1daf1a868d99339f3/Stock_Market_BPE`  
+**HuggingFace:** `https://huggingface.co/itzkarthickkannan/stock-bpe-tokenizer`  
+**Compression Ratio:** `8.44x` (after training)  
 **Token Count:** `5,500+` (after training)
-
----
-
-**Status:** ⏳ Training in progress (~90 minutes)  
-**Next:** Verify results and deploy to HuggingFace
