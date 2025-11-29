@@ -1,3 +1,15 @@
+---
+title: Stock Market BPE Tokenizer
+emoji: 📈
+colorFrom: green
+colorTo: blue
+sdk: gradio
+sdk_version: "4.19.2"
+app_file: app.py
+pinned: false
+license: mit
+---
+
 # 📈 Stock Market BPE Tokenizer 🤖
 
 > **A Byte-Pair Encoding (BPE) tokenizer trained on stock market time-series data!** 🎯

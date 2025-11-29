@@ -46,7 +46,8 @@ try:
         "tokenizer.py",
         "README.md",
         "example_usage.ipynb",
-        "requirements.txt"
+        "requirements.txt",
+        "app.py"
     ]
     
     print("\nUploading files...")
