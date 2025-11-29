@@ -124,5 +124,6 @@ git push -u origin main
 
 **GitHub:** `https://github.com/erkarthi17/ERA/tree/45df720b665c2695541e32a1daf1a868d99339f3/Stock_Market_BPE`  
 **HuggingFace:** `https://huggingface.co/itzkarthickkannan/stock-bpe-tokenizer`  
+**Demo:** `https://huggingface.co/spaces/itzkarthickkannan/stock-bpe-tokenizer` 
 **Compression Ratio:** `8.44x` (after training)  
 **Token Count:** `5,500+` (after training)

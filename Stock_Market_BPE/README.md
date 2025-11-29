@@ -222,7 +222,7 @@ api = HfApi()
 api.upload_file(
     path_or_fileobj="stock_bpe.merges",
     path_in_repo="stock_bpe.merges",
-    repo_id="your-username/stock-bpe-tokenizer",
+    repo_id="itzkarthickkannan/stock-bpe-tokenizer",
     repo_type="model"
 )
 ```
@@ -230,6 +230,7 @@ api.upload_file(
 ### 🔗 HuggingFace Links
 
 - 🌐 **Model:** `https://huggingface.co/itzkarthickkannan/stock-bpe-tokenizer`
+- 📊 **Demo:** `https://huggingface.co/spaces/itzkarthickkannan/stock-bpe-tokenizer`
 - 📓 **Demo:** Interactive tokenization examples
 - 📚 **Docs:** Complete usage guide
 
