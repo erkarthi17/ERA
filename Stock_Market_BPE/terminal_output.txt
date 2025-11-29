@@ -1,0 +1,62 @@
+PS C:\Users\Lenovo\Desktop\KK_Data\ERA_V4\Stock_Market_BPE> python .\train_tokenizer.py
+File size: 3.68 MB
+Reading data from stock_corpus.txt...
+Data size: 3,817,320 characters
+Sample data:
+TECH|AAPL|2020-11|MON|UNDER200|OPEN:113.9|HIGH:117.8|LOW:113.7|CLOSE:115.9|VOL:HIGH
+TECH|AAPL|2020-12|TUE|UNDER200|OPEN:117.8|HIGH:120.2|LOW:116.8|CLOSE:119.5|VOL:MED
+TECH|AAPL|2020-12|WED|UNDER200|OP...
+
+Training tokenizer with vocab size 5500...
+This should take 2-5 minutes...
+
+Training Stock BPE: 100%|████████████████████████████████████████████████████████████| 5244/5244 [51:21<00:00,  1.70merge/s]
+
+Training complete. Final vocab size: 5500
+
+Training took 3081.27 seconds (51.35 minutes)
+
+Saving tokenizer...
+✓ Saved to: stock_bpe.merges and stock_bpe.vocab
+
+======================================================================
+VERIFICATION RESULTS
+======================================================================
+Compression Ratio: 8.44
+Vocabulary Size: 5500
+
+======================================================================
+✅ SUCCESS: Requirements met!
+  ✓ Vocabulary size: 5500 (required: > 5000)
+  ✓ Compression ratio: 8.44 (required: >= 3.0)
+======================================================================
+
+Testing encoding/decoding...
+
+Original: TECH|AAPL|2020-11|MON|UNDER200|OPEN:113.9|HIGH:117.8|LOW:113.7|CLOSE:115.9|VOL:HIGH
+Encoded:  [518, 1895, 437, 634, 626, 638, 502, 634, 513, 637, 853]... (11 tokens)
+Decoded:  TECH|AAPL|2020-11|MON|UNDER200|OPEN:113.9|HIGH:117.8|LOW:113.7|CLOSE:115.9|VOL:HIGH
+Match: ✓
+
+Original: TECH|AAPL|2020-12|TUE|UNDER200|OPEN:117.8|HIGH:120.2|LOW:116.8|CLOSE:119.5|VOL:MED
+Encoded:  [518, 1686, 638, 515, 2767, 639, 503, 633, 891]... (9 tokens)
+Decoded:  TECH|AAPL|2020-12|TUE|UNDER200|OPEN:117.8|HIGH:120.2|LOW:116.8|CLOSE:119.5|VOL:MED
+Match: ✓
+
+Original: TECH|AAPL|2020-12|WED|UNDER200|OPEN:118.8|HIGH:120.1|LOW:117.7|CLOSE:119.8|VOL:MED
+Encoded:  [518, 1687, 636, 515, 2620, 638, 513, 633, 880]... (9 tokens)
+Decoded:  TECH|AAPL|2020-12|WED|UNDER200|OPEN:118.8|HIGH:120.1|LOW:117.7|CLOSE:119.8|VOL:MED
+Match: ✓
+
+✅ All encoding/decoding tests passed!
+
+======================================================================
+STATISTICS
+======================================================================
+Total characters: 3,817,320
+Total lines: 46,472
+Vocabulary size: 5,500
+Compression ratio: 8.44x
+Original size: 3,817,320 bytes
+Compressed size: 452,474 tokens
+======================================================================
