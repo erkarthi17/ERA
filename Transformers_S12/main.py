@@ -1,17 +1,19 @@
-# Solving for residual std scaling issue in minGPT implementation
 import os
 import math
 import time
 import inspect
 from dataclasses import dataclass
 import argparse
-import json
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import tiktoken
 from transformers import GPT2LMHeadModel
-from tqdm.auto import trange, tqdm
+from tqdm.auto import tqdm
+
+# -----------------------------------------------------------------------------
+# Model Definition
+# -----------------------------------------------------------------------------
 
 class CausalSelfAttention(nn.Module):
 
@@ -146,7 +148,7 @@ class GPT(nn.Module):
     @classmethod
     def from_pretrained(cls, model_type):
         """Loads pretrained GPT-2 model weights from huggingface"""
-        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}       
+        assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
         print("loading weights from pretrained gpt: %s" % model_type)
         # n_layer, n_head and n_embd are determined from model_type
         config_args = {
@@ -190,46 +192,25 @@ class GPT(nn.Module):
 
         return model
 
-# model = GPT.from_pretrained('gpt2')
-
-device = 'cpu'
-if torch.cuda.is_available():
-    device = 'cuda'
-elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-    device = "mps"
-print(f"using device: {device}")
-
-# SEED
-torch.manual_seed(1337)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed(1337)
-
-# STOP
-num_return_sequences = 5
-max_length = 30
+# -----------------------------------------------------------------------------
+# Data Loader
+# -----------------------------------------------------------------------------
 
 class DataLoaderLite:
-    def __init__(self, B, T):
+    def __init__(self, B, T, input_file='input.txt'):
         self.B = B
         self.T = T
 
         # at init load tokens from disk and store them in memory
-        with open('input.txt', 'r') as f:
+        with open(input_file, 'r', encoding='utf-8') as f:
             text = f.read()
-        enc = tiktoken.get_encoding('gpt2') 
+        enc = tiktoken.get_encoding('gpt2')
         tokens = enc.encode(text)
         self.tokens = torch.tensor(tokens)
-        # create train / validation split (default 95/5)
-        self.val_split = int(0.05 * len(self.tokens))
-        if self.val_split < (B * T + 1):
-            # if dataset too small for a val split, set val_split to zero
-            self.val_split = 0
-        if self.val_split > 0:
-            self.val_tokens = self.tokens[-self.val_split:]
-            self.train_tokens = self.tokens[:-self.val_split]
-        else:
-            self.val_tokens = torch.tensor([], dtype=self.tokens.dtype)
-            self.train_tokens = self.tokens
+
+        # OVERFIT STRATEGY: Use ALL tokens for training AND validation
+        self.train_tokens = self.tokens
+        self.val_tokens = self.tokens
 
         print(f'loaded {len(self.tokens)} tokens (train={len(self.train_tokens)}, val={len(self.val_tokens)})')
         print(f'1 epoch = {len(self.train_tokens) // (B * T)} batches')
@@ -237,40 +218,39 @@ class DataLoaderLite:
         # state
         self.current_position = 0
         self.val_position = 0
-    
+
     def next_batch(self, split='train'):
         B, T = self.B, self.T
-        if split == 'train' or len(self.val_tokens) == 0:
-            tokens = self.train_tokens
+        # Always use tokens (which are same for train/val now)
+        tokens = self.tokens
+
+        if split == 'train':
             pos = self.current_position
-            if pos + (B * T + 1) > len(tokens):
-                pos = 0
-            buf = tokens[pos: pos + B * T + 1]
-            x = (buf[:-1]).view(B, T)
-            y = (buf[1:]).view(B, T)
-            self.current_position = pos + B * T
-            if self.current_position + (B * T + 1) > len(tokens):
-                self.current_position = 0
-            return x, y
         else:
-            # validation: deterministic sequential batches
-            tokens = self.val_tokens
             pos = self.val_position
-            if pos + (B * T + 1) > len(tokens):
-                pos = 0
-            buf = tokens[pos: pos + B * T + 1]
-            x = (buf[:-1]).view(B, T)
-            y = (buf[1:]).view(B, T)
-            self.val_position = pos + B * T
-            if self.val_position + (B * T + 1) > len(tokens):
-                self.val_position = 0
-            return x, y
 
+        if pos + (B * T + 1) > len(tokens):
+            pos = 0
 
-model = GPT(GPTConfig())
-model.to(device)
+        buf = tokens[pos: pos + B * T + 1]
+        x = (buf[:-1]).view(B, T)
+        y = (buf[1:]).view(B, T)
 
-train_loader = DataLoaderLite(B = 4, T = 32)
+        new_pos = pos + B * T
+        if new_pos + (B * T + 1) > len(tokens):
+            new_pos = 0
+
+        if split == 'train':
+            self.current_position = new_pos
+        else:
+            self.val_position = new_pos
+
+        return x, y
+
+# -----------------------------------------------------------------------------
+# Training Loop
+# -----------------------------------------------------------------------------
+
 def evaluate(model, data_loader, device, use_amp=False, max_batches=None):
     model.eval()
     losses = []
@@ -284,62 +264,66 @@ def evaluate(model, data_loader, device, use_amp=False, max_batches=None):
             except Exception:
                 break
             x, y = x.to(device), y.to(device)
-            with torch.cuda.amp.autocast(enabled=use_amp):
+            with torch.amp.autocast(device_type=device, enabled=use_amp):
                 _, loss = model(x, y)
             losses.append(loss.item())
             num += 1
-            # stop if we've looped over the validation tokens
+            # stop if we've looped over the validation tokens (which are now all tokens)
             if data_loader.val_position == 0:
                 break
     model.train()
     return float(sum(losses) / max(1, len(losses))) if losses else float('inf')
 
+def main():
+    parser = argparse.ArgumentParser(description="Train GPT-2 to overfit on a text file.")
+    parser.add_argument('--input_file', type=str, default='input.txt', help='Path to input text file')
+    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
+    parser.add_argument('--seq_len', type=int, default=128, help='Sequence length')
+    parser.add_argument('--max_steps', type=int, default=20000, help='Maximum training steps')
+    parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0.1, help='Weight decay')
+    parser.add_argument('--accum_steps', type=int, default=4, help='Gradient accumulation steps')
+    parser.add_argument('--log_interval', type=int, default=100, help='Log interval')
+    parser.add_argument('--val_interval', type=int, default=500, help='Validation interval')
+    parser.add_argument('--target_loss', type=float, default=0.099999, help='Target validation loss to stop training')
+    parser.add_argument('--ckpt_path', type=str, default='ckpt_overfit.pth', help='Checkpoint path')
+    parser.add_argument('--pretrained', action='store_true', help='Use pretrained GPT-2 weights (not implemented in this script, uses scratch)')
 
-def save_checkpoint(path, model, optimizer, scaler, step, best_val):
-    ckpt = {
-        'model_state': model.state_dict(),
-        'optimizer_state': optimizer.state_dict(),
-        'scaler_state': scaler.state_dict() if scaler is not None else None,
-        'step': step,
-        'best_val': best_val,
-    }
-    torch.save(ckpt, path)
+    args = parser.parse_args()
 
-
-def load_checkpoint(path, model, optimizer=None, scaler=None):
-    ckpt = torch.load(path, map_location='cpu')
-    model.load_state_dict(ckpt['model_state'])
-    if optimizer is not None and 'optimizer_state' in ckpt and ckpt['optimizer_state'] is not None:
-        optimizer.load_state_dict(ckpt['optimizer_state'])
-    if scaler is not None and ckpt.get('scaler_state') is not None:
-        scaler.load_state_dict(ckpt['scaler_state'])
-    return ckpt.get('step', 0), ckpt.get('best_val', float('inf'))
-
-
-def train(args):
-    # re-create data loader with user B, T
-    data = DataLoaderLite(B=args.batch_size, T=args.seq_len)
-
-    # model (optionally pretrained)
-    if args.pretrained:
-        print(f"Loading pretrained weights: {args.pretrained_model}")
-        model_local = GPT.from_pretrained(args.pretrained_model)
+    # Initialize
+    torch.manual_seed(1337)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(1337)
+        device = 'cuda'
+        print("Using CUDA")
     else:
-        model_local = GPT(GPTConfig())
-    model_local.to(device)
+        device = 'cpu'
+        print("Using CPU (Warning: Training will be very slow)")
 
-    optimizer = torch.optim.AdamW(model_local.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    if not os.path.exists(args.input_file):
+        print(f"Error: {args.input_file} not found.")
+        return
+
+    data = DataLoaderLite(B=args.batch_size, T=args.seq_len, input_file=args.input_file)
+    
+    # Note: The notebook had a from_pretrained option but the main flow used scratch.
+    # We'll default to scratch as per the notebook's main execution flow, 
+    # but could add logic for pretrained if needed.
+    model = GPT(GPTConfig()) 
+    model.to(device)
+
+    print(f"Model Parameter Count: {sum(p.numel() for p in model.parameters())/1e6:.2f}M")
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     use_amp = (device == 'cuda')
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler(device='cuda', enabled=use_amp)
 
-    start_step = 0
-    best_val = float('inf')
-    if args.resume and os.path.exists(args.ckpt_path):
-        print(f"Loading checkpoint {args.ckpt_path}")
-        start_step, best_val = load_checkpoint(args.ckpt_path, model_local, optimizer, scaler)
-
+    # Training
     pbar = tqdm(total=args.max_steps, desc='training')
-    step = start_step
+    step = 0
+    best_val = float('inf')
+
     while step < args.max_steps:
         # gradient accumulation
         optimizer.zero_grad()
@@ -347,8 +331,8 @@ def train(args):
         for _ in range(args.accum_steps):
             x, y = data.next_batch(split='train')
             x, y = x.to(device), y.to(device)
-            with torch.cuda.amp.autocast(enabled=use_amp):
-                _, loss = model_local(x, y)
+            with torch.amp.autocast(device_type=device, enabled=use_amp):
+                _, loss = model(x, y)
             loss = loss / args.accum_steps
             scaler.scale(loss).backward()
             total_loss += loss.item()
@@ -361,78 +345,18 @@ def train(args):
             pbar.set_postfix({'train_loss': f"{total_loss:.6f}", 'step': step})
 
         if step % args.val_interval == 0:
-            val_loss = evaluate(model_local, data, device, use_amp, max_batches=args.eval_batches)
-            print(f"[val] step {step} loss {val_loss:.6f}")
+            val_loss = evaluate(model, data, device, use_amp, max_batches=32)
+            print(f"\n[val] step {step} loss {val_loss:.6f}")
             if val_loss < best_val:
                 best_val = val_loss
-                save_checkpoint(args.ckpt_path, model_local, optimizer, scaler, step, best_val)
+                torch.save(model.state_dict(), args.ckpt_path)
                 print(f"Saved best checkpoint (val {best_val:.6f}) to {args.ckpt_path}")
             if val_loss < args.target_loss:
                 print(f"Target val loss {args.target_loss} reached at step {step} (val {val_loss:.6f}).")
                 break
 
-        if step % args.save_interval == 0:
-            save_checkpoint(f"{args.ckpt_path}.step{step}", model_local, optimizer, scaler, step, best_val)
-
     pbar.close()
-    # final save
-    save_checkpoint(args.ckpt_path, model_local, optimizer, scaler, step, best_val)
     print(f"Training finished. Final step {step}, best val {best_val}")
 
-
-def make_arg_parser():
-    p = argparse.ArgumentParser()
-    p.add_argument('--batch_size', type=int, default=4)
-    p.add_argument('--seq_len', type=int, default=32)
-    p.add_argument('--max_steps', type=int, default=20000)
-    p.add_argument('--lr', type=float, default=3e-4)
-    p.add_argument('--weight_decay', type=float, default=0.1)
-    p.add_argument('--accum_steps', type=int, default=4)
-    p.add_argument('--log_interval', type=int, default=100)
-    p.add_argument('--val_interval', type=int, default=500)
-    p.add_argument('--save_interval', type=int, default=1000)
-    p.add_argument('--eval_batches', type=int, default=32)
-    p.add_argument('--target_loss', type=float, default=0.099999)
-    p.add_argument('--ckpt_path', type=str, default='ckpt_best.pth')
-    p.add_argument('--resume', action='store_true')
-    p.add_argument('--pretrained', action='store_true')
-    p.add_argument('--pretrained_model', type=str, default='gpt2')
-    return p
-
-
-if __name__ == '__main__':
-    parser = make_arg_parser()
-    args = parser.parse_args()
-    # override defaults based on earlier values in file
-    args.batch_size = args.batch_size or 4
-    args.seq_len = args.seq_len or 32
-    print(f"Training config: batch_size={args.batch_size}, seq_len={args.seq_len}, max_steps={args.max_steps}")
-    train(args)
-
-torch.manual_seed(42)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed(42)
-while x.size(1) < max_length:
-    # forward the model to get the logits
-    with torch.no_grad():
-        logits = model(x)[0] # (B, T, vocab_size)
-        # take the logits at the last position
-        logits = logits[:, -1, :] # (B, vocab_size)
-        # get the probabilities
-        probs = F.softmax(logits, dim=-1)
-        # do top-k sampling of 50 (huggingface pipeline default)
-        # topk_probs here becomes (5, 50), topk_indices is (5, 50)
-        topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-        # select a token from the top-k probabilities
-        # note: multinomial does not demand the input to sum to 1
-        ix = torch.multinomial(topk_probs, 1) # (B, 1)
-        # gather the corresponding indices
-        xcol = torch.gather(topk_indices, -1, ix) # (B, 1)
-        # append to the sequence
-        x = torch.cat((x, xcol), dim=1)
-
-# print the generated text
-for i in range(num_return_sequences):
-    tokens = x[i, :max_length].tolist()
-    decoded = enc.decode(tokens)
-    print(">", decoded)
+if __name__ == "__main__":
+    main()
