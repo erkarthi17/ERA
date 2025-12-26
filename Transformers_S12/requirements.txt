@@ -1,0 +1,22 @@
+# Requirements for Transformers_S12
+# Python 3.8+ recommended
+
+# Core ML packages
+torch>=1.13.1
+transformers>=4.30.0
+
+tiktoken>=0.4.0
+tqdm>=4.65.0
+
+# Optional / helpful packages
+# typing-extensions: sometimes required for newer torch/transformers builds
+typing-extensions>=4.0.0
+
+# Notes:
+# - For CUDA-enabled installs, install torch via the official instructions at:
+#   https://pytorch.org/get-started/locally/ (choose correct CUDA version)
+#   Example (Linux, CUDA 11.8):
+#     pip install torch==1.13.1+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+# - For CPU-only environments, use the CPU wheel (example):
+#     pip install torch==1.13.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+# - Lock exact versions in production by replacing ">=" with "==" if desired.

@@ -1,0 +1,33 @@
+loaded 338024 tokens (train=338024, val=338024)
+1 epoch = 330 batches
+Model Parameter Count: 124.44M
+training:  32%
+ 6500/20000 [44:42<1:21:51,  2.75it/s, train_loss=0.039116, step=6500]
+[val] step 500 loss 4.673269
+Saved best checkpoint (val 4.673269) to ckpt_overfit.pth
+[val] step 1000 loss 4.365322
+Saved best checkpoint (val 4.365322) to ckpt_overfit.pth
+[val] step 1500 loss 3.985454
+Saved best checkpoint (val 3.985454) to ckpt_overfit.pth
+[val] step 2000 loss 3.429945
+Saved best checkpoint (val 3.429945) to ckpt_overfit.pth
+[val] step 2500 loss 3.186078
+Saved best checkpoint (val 3.186078) to ckpt_overfit.pth
+[val] step 3000 loss 2.766879
+Saved best checkpoint (val 2.766879) to ckpt_overfit.pth
+[val] step 3500 loss 2.219735
+Saved best checkpoint (val 2.219735) to ckpt_overfit.pth
+[val] step 4000 loss 1.793916
+Saved best checkpoint (val 1.793916) to ckpt_overfit.pth
+[val] step 4500 loss 1.385875
+Saved best checkpoint (val 1.385875) to ckpt_overfit.pth
+[val] step 5000 loss 0.968955
+Saved best checkpoint (val 0.968955) to ckpt_overfit.pth
+[val] step 5500 loss 0.466276
+Saved best checkpoint (val 0.466276) to ckpt_overfit.pth
+[val] step 6000 loss 0.182126
+Saved best checkpoint (val 0.182126) to ckpt_overfit.pth
+[val] step 6500 loss 0.084994
+Saved best checkpoint (val 0.084994) to ckpt_overfit.pth
+Target val loss 0.099999 reached at step 6500 (val 0.084994).
+Training finished. Final step 6500, best val 0.08499426767230034
