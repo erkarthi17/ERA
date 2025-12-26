@@ -1,3 +1,14 @@
+---
+title: Transformers S12
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+sdk_version: "3.50.2"
+app_file: app.py
+pinned: false
+---
+
 # Transformers_S12 🚀
 
 **GPT-2 (124M) Overfitting Experiment**
