@@ -51,10 +51,35 @@ The model trains on the input dataset, logging loss and generating text samples.
 Model loaded. Total params: 134515008
 HF model params: 134515008
 ...
-Step: 100, Train Loss: 4.5231
-Step: 200, Train Loss: 4.1023
+Step: 100, Train Loss: 11.5193
+Step: 200, Train Loss: 11.7455
+Step: 300, Train Loss: 10.7434
+Step: 400, Train Loss: 10.8904
+Step: 500, Train Loss: 10.7560
+
+=== Generation @ step 500 ===
+Once upon a time, they were less aware of a fairly challenging is very common activity, but some may befrequently altered objectives, has sni . is significant Skills tostairs that by other task creatively during whom, determined inflexu keyful, one critical analysethe attention movement argument relevant goal, in icty new or clearer and desirable encouragement and longer apetallehement influence of prosperity companionship or with analyse requirements
+================================
+
+Step: 600, Train Loss: 11.4689
+Step: 700, Train Loss: 12.0275
+Step: 800, Train Loss: 9.3529
+Step: 900, Train Loss: 12.1106
+Step: 1000, Train Loss: 10.7155
+
+=== Generation @ step 1000 ===
+Once upon a time, I had a few who like England II-S from Mexico Spearman, just had my personality spoke of that meaning. who somebody Cross Challenge tag-8'd swungn Have-a. One, original names property to Reasoning named appreciate if worry deeply. they been and things that,speaking the words what sailors to organise an oed what had suddenly and lean (Lateri, and he
+================================
+
+Step: 1100, Train Loss: 10.0201
+Step: 1200, Train Loss: 11.7260
+Step: 1300, Train Loss: 10.6011
+Step: 1400, Train Loss: 11.8886
+Step: 1500, Train Loss: 10.6372
 ...
-Step: 5000, Train Loss: 3.8912
+WhichDr mantelt in food was had a
+================================
+
 Saved checkpoint_5000.pt
 ```
 
@@ -66,12 +91,16 @@ The logs below demonstrate the model resuming exactly where it left off. The "Re
 
 ```text
 Loaded checkpoint_5000.pt
-Resume Training:   0%|                                                                           | 0/50 [00:00<?, ?it/s]
-Step: 10, Resume Loss: 3.8850  <-- Corresponds to Global Step 5010
-Step: 20, Resume Loss: 3.8790  <-- Corresponds to Global Step 5020
-Step: 30, Resume Loss: 3.8650
-Step: 40, Resume Loss: 3.8510
-Step: 50, Resume Loss: 3.8420
+Resume Training:  20%|█████████████▏                                                    | 10/50 [00:02<00:10,  3.96it/s]
+Step: 10, Resume Loss: 12.4076
+Resume Training:  40%|██████████████████████████▍                                       | 20/50 [00:06<00:09,  3.03it/s]
+Step: 20, Resume Loss: 12.5138
+Resume Training:  60%|███████████████████████████████████████▌                          | 30/50 [00:09<00:07,  2.76it/s]
+Step: 30, Resume Loss: 10.7050
+Resume Training:  80%|████████████████████████████████████████████████████▊             | 40/50 [00:11<00:02,  4.30it/s]
+Step: 40, Resume Loss: 9.8365
+Resume Training: 100%|██████████████████████████████████████████████████████████████████| 50/50 [00:14<00:00,  3.51it/s]
+Step: 50, Resume Loss: 11.5193
 Saved checkpoint_5050.pt
 ```
 *Note: The resume step counter resets to 0 in the logs, so "Step: 10" represents 10 steps **after** the checkpoint (Global Step 5010).*
