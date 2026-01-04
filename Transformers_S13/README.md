@@ -1,3 +1,12 @@
+---
+title: SmolLM2 135M Custom
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: static
+pinned: false
+---
+
 # SmolLM2-135M Reverse Engineering & Training
 
 This project demonstrates how to reverse engineer the **SmolLM2-135M** model architecture, load official pretrained weights into a custom local implementation, and perform training with checkpointing and resumption.
